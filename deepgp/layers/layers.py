@@ -30,9 +30,9 @@ class SparseGP_MPI(SparseGP):
                 inference_method = VarDTC()
             else:
                 inference_method = VarDTC_parallel(mpi_comm, mpi_root)
-        elif inference_method=='qr' and mpi_comm is None:
-            from ..inference import VarDTC_QR
-            inference_method = VarDTC_QR()
+        elif inference_method=='inferentia' and mpi_comm is None:
+            from ..inference import VarDTC_Inferentia
+            inference_method = VarDTC_Inferentia()
             self.psicov = True
         elif inference_method=='svi':
             from ..inference import SVI_VarDTC
