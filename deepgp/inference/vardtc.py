@@ -82,7 +82,6 @@ class VarDTC(LatentFunctionInference):
 
         Cached intermediate results: Kmm, KmmInv,
         """
-        from ..models.sslvm import Gaussian_Gamma
 
 
         num_data, output_dim = Y.shape
@@ -91,12 +90,13 @@ class VarDTC(LatentFunctionInference):
         uncertain_inputs = isinstance(X, VariationalPosterior)
         uncertain_outputs = isinstance(Y, VariationalPosterior)
 
-        if isinstance(likelihood, Gaussian_Gamma):
-            beta = likelihood.expectation_beta()
-            logL_R = -num_data*likelihood.expectation_logbeta()
-        else:
-            beta = 1./np.fmax(likelihood.variance, 1e-6)
-            logL_R = -num_data*np.log(beta)
+        # from ..models.sslvm import Gaussian_Gamma
+        # if isinstance(likelihood, Gaussian_Gamma):
+        #     beta = likelihood.expectation_beta()
+        #     logL_R = -num_data*likelihood.expectation_logbeta()
+        # else:
+        beta = 1./np.fmax(likelihood.variance, 1e-6)
+        logL_R = -num_data*np.log(beta)
 
 
         psi0, psi2, YRY, psi1, psi1Y, Shalf, psi1S = self.gatherPsiStat(kern, X, Z, Y, beta, uncertain_inputs)
@@ -166,13 +166,13 @@ class VarDTC(LatentFunctionInference):
         # Compute dL_dthetaL for uncertian input and non-heter noise
         #======================================================================
 
-        if isinstance(likelihood, Gaussian_Gamma):
-            from scipy.special import polygamma
-            dL_dthetaL = ((YRY + output_dim*psi0)/2. - (dL_dpsi2R*psi2).sum() - np.trace(LLinvPsi1TYYTPsi1LLinvT))/-beta
-            likelihood.q_a.gradient = num_data*output_dim/2.*polygamma(1, likelihood.q_a) + dL_dthetaL/likelihood.q_b
-            likelihood.q_b.gradient = num_data*output_dim/(-2.*likelihood.q_b) +dL_dthetaL*(-likelihood.q_a/(likelihood.q_b*likelihood.q_b))
-        else:
-            dL_dthetaL = (YRY*beta + beta*output_dim*psi0 - num_data*output_dim*beta)/2. - beta*(dL_dpsi2R*psi2).sum() - beta*np.trace(LLinvPsi1TYYTPsi1LLinvT)
+        # if isinstance(likelihood, Gaussian_Gamma):
+        #     from scipy.special import polygamma
+        #     dL_dthetaL = ((YRY + output_dim*psi0)/2. - (dL_dpsi2R*psi2).sum() - np.trace(LLinvPsi1TYYTPsi1LLinvT))/-beta
+        #     likelihood.q_a.gradient = num_data*output_dim/2.*polygamma(1, likelihood.q_a) + dL_dthetaL/likelihood.q_b
+        #     likelihood.q_b.gradient = num_data*output_dim/(-2.*likelihood.q_b) +dL_dthetaL*(-likelihood.q_a/(likelihood.q_b*likelihood.q_b))
+        # else:
+        dL_dthetaL = (YRY*beta + beta*output_dim*psi0 - num_data*output_dim*beta)/2. - beta*(dL_dpsi2R*psi2).sum() - beta*np.trace(LLinvPsi1TYYTPsi1LLinvT)
         
         #======================================================================
         # Compute dL_dpsi

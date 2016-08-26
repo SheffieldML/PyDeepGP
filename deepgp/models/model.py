@@ -5,8 +5,7 @@ from scipy.linalg import LinAlgError
 from GPy import Model,likelihoods
 from GPy.core.parameterization.variational import VariationalPosterior,\
     NormalPosterior
-from ..layers import ObservedLayer, HiddenLayer, TopHiddenLayer, ClassificationObservedLayer
-from ..layers.mrd import ObservedMRDLayer
+from ..layers import ObservedLayer, HiddenLayer, TopHiddenLayer
 
 class DeepGP(Model):
     
@@ -87,8 +86,6 @@ class DeepGP(Model):
                         self.layers.append(ObservedLayer(nDims[0],Xs[i].shape[1], Y, X=Xs[i], likelihood=likelihood, num_inducing=num_inducing[i], init=inits[i], kernel=kernels[i] if kernels is not None else None, back_constraint=back_constraint, inference_method=inference_method, mpi_comm=mpi_comm, mpi_root=mpi_root, auto_update=auto_update, repeatX=True, repeatXsplit=self.nDimsOrig[1]))
                         self.layers[-1].X_dim_free = range(self.nDimsOrig[1])
                         self.layers[-1].X_dim_top  = np.arange(self.nDimsOrig[1],self.nDimsOrig[1]+X.shape[1]).tolist()
-                    elif self.obs_data=='classification' or self.obs_data=='binary':
-                        self.layers.append(ClassificationObservedLayer(nDims[0],nDims[1], Y, X=Xs[i], init=inits[i], obs_data=obs_data, back_constraint=back_constraint, mpi_comm=mpi_comm, mpi_root=mpi_root, auto_update=auto_update))
                     else:
                         self.layers.append(ObservedLayer(nDims[0],nDims[1], Y, X=Xs[i], likelihood=likelihood, num_inducing=num_inducing[i], init=inits[i], kernel=kernels[i] if kernels is not None else None, back_constraint=back_constraint, inference_method=inference_method, mpi_comm=mpi_comm, mpi_root=mpi_root, auto_update=auto_update))
             elif i==self.nLayers-1:
