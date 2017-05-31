@@ -30,7 +30,7 @@ def initialize_latent(init, datanum, input_dim, Y):
         Xr = m.X.mean
         var = X_var
         #print m
-        print 'Init SNR:' + str(Y.var() / m['Gaussian_noise.variance'])
+        print('Init SNR:' + str(Y.var() / m['Gaussian_noise.variance']))
     elif init == 'randomProjection':
         # print 'Initializing latent with Random projection...'
 
@@ -60,7 +60,7 @@ def check_snr(m, messages=True):
                     cur_var = m.layers[i].views[j].Y.var()
                 cur_snr = cur_var / m.layers[i].views[j].Gaussian_noise.variance.values
                 if messages:
-                    print 'SNR layer ' + str(i) + ' view ' + str(j) + ':' + str(cur_snr)
+                    print('SNR layer ' + str(i) + ' view ' + str(j) + ':' + str(cur_snr))
                 snr[-1].append(cur_snr)
         else:
             if isinstance(m.layers[i].Y, NormalPosterior) or isinstance(m.layers[i].Y, VariationalPosterior):
@@ -69,7 +69,7 @@ def check_snr(m, messages=True):
                 cur_var = m.layers[i].Y.var()
             cur_snr = cur_var / m.layers[i].Gaussian_noise.variance.values
             if messages:
-                print 'SNR layer ' + str(i) + ':' + str(cur_snr)
+                print('SNR layer ' + str(i) + ':' + str(cur_snr))
             snr.append(cur_snr)
         sys.stdout.flush()
         return snr

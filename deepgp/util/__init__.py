@@ -2,4 +2,4 @@
 # Licensed under the BSD 3-clause license (see LICENSE.txt)
 
 from .util import *
-import misc
+from . import misc

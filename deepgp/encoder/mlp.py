@@ -130,8 +130,8 @@ class MLP(Parameterized):
         self.positive_obs = positive_obs
 
         # Layers order from input to output
-        self.layers = [Layer(nUnits[i],nUnits[i+1], activation=activation if i!=self.nLayers-1 else ('softplus' if positive_obs else None), regularization=regularization, reg_weight=reg_weight, name='layer_'+str(i+1)) for i in xrange(self.nLayers)]
-        for i in xrange(self.nLayers):
+        self.layers = [Layer(nUnits[i],nUnits[i+1], activation=activation if i!=self.nLayers-1 else ('softplus' if positive_obs else None), regularization=regularization, reg_weight=reg_weight, name='layer_'+str(i+1)) for i in range(self.nLayers)]
+        for i in range(self.nLayers):
             self.layers[i].link_layers(self.layers[i-1] if i>0 else None, self.layers[i+1] if i<self.nLayers-1 else None)
         self.link_parameters(*self.layers)
         self.theano_init = False
