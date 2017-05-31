@@ -77,7 +77,7 @@ class DeepGP(Model):
         
         # Initialize Layers
         self.layers = []
-        for i in xrange(self.nLayers):
+        for i in range(self.nLayers):
             if i==0:
                 if mrd_flag:#isinstance(nDims[0], (list,tuple)):
                     # MRD
@@ -175,7 +175,7 @@ class DeepGP(Model):
         return Xs
     
     def ensure_repeatX_constraints(self):
-        for i in xrange(self.nLayers):
+        for i in range(self.nLayers):
             if hasattr(self.layers[i],'X_dim_top'):
                 self.layers[i].X.mean[:,self.layers[i].X_dim_top].fix(warning=False)
                 self.layers[i].X.variance[:,self.layers[i].X_dim_top] = 1e-6*np.ones((self.layers[i].X.variance[:,self.layers[i].X_dim_top].shape[0],self.layers[i].X.variance[:,self.layers[i].X_dim_top].shape[1]))
