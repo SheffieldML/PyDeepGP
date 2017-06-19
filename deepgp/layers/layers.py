@@ -312,7 +312,7 @@ class ObservedLayer(Layer):
 class HiddenLayer(Layer):
 
     def __init__(self, layer_lower, dim_up, X=None, X_variance=None, Z=None, num_inducing=10, kernel=None, inference_method=None, noise_var=1e-2, init='rand', mpi_comm=None, mpi_root=0, back_constraint=True, encoder=None, auto_update=True, name='hiddenlayer'):
-        self.dim_up, self.dim_down = dim_up, self.Y.shape[1]
+        self.dim_up, self.dim_down = dim_up, layer_lower.X.shape[1]
         likelihood = likelihoods.Gaussian(variance=noise_var)
         self.variationalterm = NormalEntropy()
 
