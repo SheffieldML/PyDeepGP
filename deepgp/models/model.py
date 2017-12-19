@@ -48,7 +48,7 @@ class DeepGP(Model):
         if self.X_observed:
             assert self.input_dim==X.shape[1], "The dimensionality of output has to agree with the dimensionality of data (X)!"
             if mrd_flag:
-                for i in len(Y):
+                for i in range(len(Y)):
                     assert Y[i].shape[0]==X.shape[0], "The numbers of datapoints in X and Y have to be equal!"
             else:
                 assert Y.shape[0]==X.shape[0], "The numbers of datapoints in X and Y have to be equal!"
