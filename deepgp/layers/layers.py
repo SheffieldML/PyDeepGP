@@ -70,11 +70,11 @@ class SparseGP_MPI(SparseGP):
                 self.grad_dict['dL_dqU_var'] += -dKL_dqU_var*self.qU_ratio
                 self.grad_dict['dL_dKmm'] += -dKL_dKuu*self.qU_ratio
         else:
-            self.posterior, self._log_marginal_likelihood, self.grad_dict = self.inference_method.inference(self.kern, self.X, self.Z, self.likelihood, self.Y, self.Y_metadata, Kuu_sigma=self.Kuu_sigma)
+            self.posterior, self._log_marginal_likelihood, self.grad_dict = self.inference_method.inference(self.kern, self.X, self.Z, self.likelihood, self.Y, self.Y_metadata, Kuu_sigma=self.Kuu_sigma if hasattr(self, 'Kuu_sigma') else None)
 
         self.likelihood.update_gradients(self.grad_dict['dL_dthetaL'])
         dL_dKmm = self.grad_dict['dL_dKmm']
-        if self.mpi_comm is None or (self.mpi_comm is not None and self.mpi_comm.rank==self.mpi_root):
+        if (self.mpi_comm is None or (self.mpi_comm is not None and self.mpi_comm.rank==self.mpi_root)) and (hasattr(self, 'Kuu_sigma') and self.Kuu_sigma is not None):
             self.Kuu_sigma.gradient = np.diag(dL_dKmm)
 
         if isinstance(self.X, VariationalPosterior):
@@ -312,7 +312,7 @@ class ObservedLayer(Layer):
 class HiddenLayer(Layer):
 
     def __init__(self, layer_lower, dim_up, X=None, X_variance=None, Z=None, num_inducing=10, kernel=None, inference_method=None, noise_var=1e-2, init='rand', mpi_comm=None, mpi_root=0, back_constraint=True, encoder=None, auto_update=True, name='hiddenlayer'):
-        self.dim_up, self.dim_down = dim_up, layer_lower.X.shape[1]
+        self.dim_up, self.dim_down = dim_up, layer_lower.X.shape[1] #self.Y.shape[1]
         likelihood = likelihoods.Gaussian(variance=noise_var)
         self.variationalterm = NormalEntropy()
 

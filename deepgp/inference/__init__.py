@@ -3,3 +3,6 @@
 
 from .vardtc import VarDTC
 from .vardtc_parallel import VarDTC_parallel
+from .svi_vardtc import SVI_VarDTC
+from .svi_ratio import SVI_Ratio
+from .inferenceX import InferenceX

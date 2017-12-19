@@ -14,7 +14,7 @@ def read(fname):
 setup(name = 'DGP',
       version = version,
       author = read('AUTHORS.txt'),
-      author_email = "z.dai@sheffield.ac.uk",
+      author_email = "damianou@amazon.com",
       description = ("Deep Gaussian Process"),
       license = "BSD 3-clause",
       keywords = "deep learning",

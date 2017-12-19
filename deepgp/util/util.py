@@ -130,3 +130,14 @@ def transform_labels(l):
     else:
         ret = np.argmax(l,axis=1)[:,None]
     return ret
+
+def visualize_DGP(model, labels, layer=0, dims=[0,1]):
+    """
+    A small utility to visualize the latent space of a DGP.
+    """
+    import matplotlib.pyplot as plt
+
+    colors = ['r','g', 'b', 'm']
+    markers = ['x','o','+', 'v']
+    for i in range(model.layers[layer].X.mean.shape[0]):
+        plt.scatter(model.layers[layer].X.mean[i,0],model.layers[layer].X.mean[i,1],color=colors[labels[i]], s=16, marker=markers[labels[i]])
