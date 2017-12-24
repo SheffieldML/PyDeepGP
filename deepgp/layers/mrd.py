@@ -108,8 +108,9 @@ class MRDLayer(Parameterized):
 
         #assert back_constraint
         self.uncertain_inputs = uncertain_inputs
-        Y = self.Y if self.layer_lower is None else self.layer_lower.X        
+        Y = self.Y if self.layer_lower is None else self.layer_lower.X
         assert isinstance(dim_down, list) or isinstance(dim_down, tuple)
+	assert isinstance(kernel, list) and len(kernel)==len(dim_down), "The number of kernels has to be equal to the number of input modalities!"
         super(MRDLayer, self).__init__(name=name)
         self.mpi_comm, self.mpi_root = mpi_comm, mpi_root
 
