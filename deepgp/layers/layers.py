@@ -15,8 +15,13 @@ from GPy.inference.latent_function_inference.posterior import Posterior
 
 class SparseGP_MPI(SparseGP):
     
-    def __init__(self, X, Y, Z, kernel, likelihood, mean_function=None, inference_method=None,
-                 name='sparse gp', Y_metadata=None, normalizer=False, mpi_comm=None, mpi_root=0, auto_update=True):
+    def __init__(self, X, Y, Z, kernel, likelihood,
+                 mean_function=None, inference_method=None,
+                 name='sparse gp', Y_metadata=None,
+                 normalizer=False,
+                 mpi_comm=None,
+                 mpi_root=0,
+                 auto_update=True):
         self.mpi_comm = mpi_comm
         self.mpi_root = mpi_root
         self.psicov = False
@@ -39,8 +44,12 @@ class SparseGP_MPI(SparseGP):
             inference_method = SVI_VarDTC()
             self.svi = True
         
-        super(SparseGP_MPI, self).__init__(X, Y, Z, kernel, likelihood, mean_function=mean_function, inference_method=inference_method,
-                 name=name, Y_metadata=Y_metadata, normalizer=normalizer)
+        super(SparseGP_MPI, self).__init__(X, Y, Z, kernel,
+                                           likelihood,
+                                           mean_function=mean_function,
+                                           inference_method=inference_method,
+                                           name=name, Y_metadata=Y_metadata,
+                                           normalizer=normalizer)
         
         if self.svi:
             from ..util.misc import comp_mapping
@@ -156,7 +165,14 @@ class SparseGP_MPI(SparseGP):
             
 class Layer(SparseGP_MPI):
     
-    def __init__(self, layer_lower, dim_down, dim_up, likelihood, X=None, X_variance=None, init='PCA',  Z=None, num_inducing=10,  kernel=None, inference_method=None, uncertain_inputs=True,mpi_comm=None, mpi_root=0, back_constraint=True, encoder=None, auto_update=True, name='layer'):
+    def __init__(self, layer_lower,
+                 dim_down, dim_up,
+                 likelihood,
+                 X=None, X_variance=None, init='PCA',
+                 Z=None, num_inducing=10,  kernel=None,
+                 inference_method=None, uncertain_inputs=True,
+                 mpi_comm=None, mpi_root=0, back_constraint=True,
+                 encoder=None, auto_update=True, name='layer'):
 
         self.uncertain_inputs = uncertain_inputs
         self.layer_lower = layer_lower
@@ -183,10 +199,13 @@ class Layer(SparseGP_MPI):
         
         if uncertain_inputs: X = NormalPosterior(X, X_variance)
         if kernel is None: kernel = kern.RBF(dim_up, ARD = True)
-        assert kernel.input_dim==X.shape[1], "The dimensionality of input has to be equal to the input dimensionality of kernel!"
+        assert kernel.input_dim==X.shape[1], "The dimensionality of input has to be equal to the input dimensionality of the kernel!"
         self.Kuu_sigma = Param('Kuu_var', np.zeros(num_inducing)+1e-3, Logexp())
         
-        super(Layer, self).__init__(X, Y, Z, kernel, likelihood, inference_method=inference_method, mpi_comm=mpi_comm, mpi_root=mpi_root, auto_update=auto_update, name=name)
+        super(Layer, self).__init__(X, Y, Z, kernel,
+                                    likelihood, inference_method=inference_method,
+                                    mpi_comm=mpi_comm, mpi_root=mpi_root,
+                                    auto_update=auto_update, name=name)
         self.link_parameter(self.Kuu_sigma)
         if back_constraint: self.encoder = encoder
 
@@ -263,12 +282,22 @@ class Layer(SparseGP_MPI):
         variationalterm = NormalPrior() if isinstance(self.variationalterm, NormalPrior) else NormalEntropy()
         
         if binObserved:
-            layer = BinaryPredLayer(X, Y, kernel, Z, posterior, likelihood=likelihood, layer_lower=layer_lower, inference_method=SVI_Ratio_Binary(), 
-                              variationalterm= variationalterm, X_var=X_var,
-                              encoder=encoder, name=self.name)
+            layer = BinaryPredLayer(X, Y, kernel, Z,
+                                    posterior,
+                                    likelihood=likelihood,
+                                    layer_lower=layer_lower,
+                                    inference_method=SVI_Ratio_Binary(), 
+                                    variationalterm=variationalterm,
+                                    X_var=X_var,
+                                    encoder=encoder,
+                                    name=self.name)
         else:
-            layer = PredLayer(X, Y, kernel, Z, posterior, likelihood=likelihood, layer_lower=layer_lower, inference_method=SVI_Ratio(), 
-                              variationalterm= variationalterm, X_var=X_var,
+            layer = PredLayer(X, Y, kernel, Z, posterior,
+                              likelihood=likelihood,
+                              layer_lower=layer_lower,
+                              inference_method=SVI_Ratio(), 
+                              variationalterm=variationalterm,
+                              X_var=X_var,
                               encoder=encoder, name=self.name)
         return layer
     
@@ -282,15 +311,23 @@ class Layer(SparseGP_MPI):
         else:
             self.unlink_parameter(self.X)
             if append:
-                self.X = NormalPosterior(np.vstack([self.X.mean.values, X.mean.values]),np.vstack([self.X.variance.values, X.variance.values]))
+                self.X = NormalPosterior(np.vstack([self.X.mean.values, X.mean.values]),
+                                         np.vstack([self.X.variance.values, X.variance.values]))
             else:
                 self.X = X
             self.link_parameter(self.X)
 
 class ObservedLayer(Layer):
 
-    def __init__(self, dim_down, dim_up, Y, X=None, X_variance=None, Z=None, num_inducing=10, kernel=None, inference_method=None, likelihood=None, init='rand', 
-                    mpi_comm=None, mpi_root=0, back_constraint=True, encoder=None, auto_update=True, repeatX=False, repeatXsplit=0, name='obslayer'):
+    def __init__(self, dim_down, dim_up,
+                 Y, X=None, X_variance=None,
+                 Z=None, num_inducing=10,
+                 kernel=None, inference_method=None,
+                 likelihood=None, init='rand', 
+                    mpi_comm=None, mpi_root=0,
+                 back_constraint=True, encoder=None,
+                 auto_update=True, repeatX=False,
+                 repeatXsplit=0, name='obslayer'):
         self.dim_up, self.dim_down = dim_up, dim_down
         self._Y = Y
         self.repeatX = repeatX
@@ -298,8 +335,16 @@ class ObservedLayer(Layer):
         if likelihood is None:  likelihood = likelihoods.Gaussian()
         self._toplayer_ = False
         self.variationalterm = NormalEntropy()
-        super(ObservedLayer, self).__init__(None, self.dim_down, dim_up, likelihood, init=init, X=X, X_variance=X_variance, Z=Z, 
-                                          num_inducing=num_inducing, kernel=kernel, inference_method=inference_method, mpi_comm=mpi_comm, mpi_root=mpi_root,  back_constraint=back_constraint, encoder=encoder, auto_update=auto_update, name=name)
+        super(ObservedLayer, self).__init__(None, self.dim_down, dim_up,
+                                            likelihood, init=init, X=X,
+                                            X_variance=X_variance, Z=Z, 
+                                            num_inducing=num_inducing,
+                                            kernel=kernel,
+                                            inference_method=inference_method,
+                                            mpi_comm=mpi_comm, mpi_root=mpi_root,
+                                            back_constraint=back_constraint,
+                                            encoder=encoder, auto_update=auto_update,
+                                            name=name)
         
     def set_as_toplayer(self, flag=True):
         if flag:
@@ -311,13 +356,28 @@ class ObservedLayer(Layer):
 
 class HiddenLayer(Layer):
 
-    def __init__(self, layer_lower, dim_up, X=None, X_variance=None, Z=None, num_inducing=10, kernel=None, inference_method=None, noise_var=1e-2, init='rand', mpi_comm=None, mpi_root=0, back_constraint=True, encoder=None, auto_update=True, name='hiddenlayer'):
+    def __init__(self, layer_lower, dim_up,
+                 X=None, X_variance=None,
+                 Z=None, num_inducing=10,
+                 kernel=None, inference_method=None,
+                 noise_var=1e-2, init='rand',
+                 mpi_comm=None, mpi_root=0, back_constraint=True,
+                 encoder=None, auto_update=True, name='hiddenlayer'):
+        
         self.dim_up, self.dim_down = dim_up, layer_lower.X.shape[1] #self.Y.shape[1]
         likelihood = likelihoods.Gaussian(variance=noise_var)
         self.variationalterm = NormalEntropy()
 
-        super(HiddenLayer, self).__init__(layer_lower, self.dim_down, dim_up, likelihood, init=init, X=X, X_variance=X_variance, Z=Z,
-                                          num_inducing=num_inducing, kernel=kernel, inference_method=inference_method, mpi_comm=mpi_comm, mpi_root=mpi_root, back_constraint=back_constraint, encoder=encoder, auto_update=auto_update,  name=name)
+        super(HiddenLayer, self).__init__(layer_lower, self.dim_down,
+                                          dim_up, likelihood, init=init,
+                                          X=X, X_variance=X_variance, Z=Z,
+                                          num_inducing=num_inducing,
+                                          kernel=kernel,
+                                          inference_method=inference_method,
+                                          mpi_comm=mpi_comm, mpi_root=mpi_root,
+                                          back_constraint=back_constraint,
+                                          encoder=encoder, auto_update=auto_update,
+                                          name=name)
 
     def update_layer(self):
         super(HiddenLayer,self).update_layer()
@@ -335,18 +395,38 @@ class HiddenLayer(Layer):
         else:
             encoder = None
             
-        return HiddenLayer(layer.layer_lower, layer.dim_up, X=layer.X.mean.values, X_variance=layer.X.variance.values, Z=layer.Z.values, 
-                            num_inducing=layer.Z.shape[1], kernel=layer.kern.copy(), inference_method=None, encoder = encoder, 
-                            noise_var=layer.likelihood.variance.values, mpi_comm=layer.mpi_comm, mpi_root=layer.mpi_root, auto_update=layer.auto_update, name=name)
+        return HiddenLayer(layer.layer_lower, layer.dim_up,
+                           X=layer.X.mean.values, X_variance=layer.X.variance.values,
+                           Z=layer.Z.values, 
+                            num_inducing=layer.Z.shape[1],
+                           kernel=layer.kern.copy(),
+                           inference_method=None, encoder = encoder, 
+                            noise_var=layer.likelihood.variance.values,
+                           mpi_comm=layer.mpi_comm, mpi_root=layer.mpi_root,
+                           auto_update=layer.auto_update, name=name)
         
 class TopHiddenLayer(Layer):
 
-    def __init__(self, layer_lower, dim_up, X=None, X_variance=None, Z=None, num_inducing=10, kernel=None, inference_method=None, noise_var=1e-2, init='rand', uncertain_inputs=True, mpi_comm=None, mpi_root=0, encoder=None, back_constraint=True, auto_update=True, name='tophiddenlayer'):
+    def __init__(self, layer_lower, dim_up, X=None, X_variance=None, Z=None,
+                 num_inducing=10, kernel=None, inference_method=None,
+                 noise_var=1e-2, init='rand', uncertain_inputs=True,
+                 mpi_comm=None, mpi_root=0,
+                 encoder=None,
+                 back_constraint=True,
+                 auto_update=True, name='tophiddenlayer'):
+        
         self.dim_up, self.dim_down = dim_up, layer_lower.X.shape[1]
         likelihood = likelihoods.Gaussian(variance=noise_var)
         self.variationalterm = NormalPrior()
-        super(TopHiddenLayer, self).__init__(layer_lower, self.dim_down, dim_up, likelihood, init=init, X=X, X_variance=X_variance, Z=Z, 
-                                          num_inducing=num_inducing, kernel=kernel, inference_method=inference_method, uncertain_inputs=uncertain_inputs, mpi_comm=mpi_comm, mpi_root=mpi_root, back_constraint=back_constraint, encoder=encoder, auto_update=auto_update, name=name)
+        super(TopHiddenLayer, self).__init__(layer_lower, self.dim_down,
+                                             dim_up, likelihood, init=init,
+                                             X=X, X_variance=X_variance, Z=Z, 
+                                             num_inducing=num_inducing, kernel=kernel,
+                                             inference_method=inference_method, uncertain_inputs=uncertain_inputs,
+                                             mpi_comm=mpi_comm, mpi_root=mpi_root,
+                                             back_constraint=back_constraint,
+                                             encoder=encoder, auto_update=auto_update,
+                                             name=name)
 
     def update_layer(self):
         super(TopHiddenLayer,self).update_layer()

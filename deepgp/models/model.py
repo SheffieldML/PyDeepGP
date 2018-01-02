@@ -6,13 +6,12 @@ import sys
 import numpy as np
 from scipy.linalg import LinAlgError
 from GPy import Model,likelihoods
-from GPy.core.parameterization.variational import VariationalPosterior,\
-    NormalPosterior
+from GPy.core.parameterization.variational import VariationalPosterior, NormalPosterior
 from ..layers import ObservedLayer, ObservedMRDLayer, HiddenLayer, TopHiddenLayer
 
 class DeepGP(Model):
-    
     """
+    Deep Gaussian process model. 
     To use repeatX, you need to:
     a) Set dimensionality of intermediate kernels to [..]+Xtrain.xhape[1]
     b) Call the constructor with repeatX=True
@@ -21,7 +20,10 @@ class DeepGP(Model):
           m = deepgp.DeepGP(..., repeatX=True)
     """
     
-    def __init__(self, nDims, Y, X=None, num_inducing=10, likelihood = None, inits='PCA', name='deepgp', kernels=None, obs_data='cont', back_constraint=True, encoder_dims=None, mpi_comm=None, mpi_root=0, repeatX=False,
+    def __init__(self, nDims, Y, X=None, num_inducing=10,
+                 likelihood = None, inits='PCA', name='deepgp',
+                 kernels=None, obs_data='cont', back_constraint=True,
+                 encoder_dims=None, mpi_comm=None, mpi_root=0, repeatX=False,
                  inference_method=None, **kwargs):
         super(DeepGP, self).__init__(name=name)
         self._IN_OPTIMIZATION_ = False
@@ -36,13 +38,17 @@ class DeepGP(Model):
         self.nDims = nDims
         self.input_dim = self.nDims[-1]
 
+        # Manifold relevance determination
         mrd_flag = isinstance(Y,(list,tuple))
         if mrd_flag:
             assert isinstance(nDims[0], (list,tuple)), "The data dimension for outputs has to be a list or tuple for MRD!"
         else:
             self.output_dim = self.nDims[0]
             assert self.output_dim==Y.shape[1], "The dimensionality of output has to agree with the dimensionality of data (Y)!"
+
+        # Back constraints
         self.back_constraint = back_constraint
+
         self.X_observed = X is not None
 
         if self.X_observed:
@@ -82,24 +88,71 @@ class DeepGP(Model):
                 if mrd_flag:#isinstance(nDims[0], (list,tuple)):
                     # MRD
                     #raise NotImplementedError()
-                    self.layers.append(ObservedMRDLayer(nDims[0],nDims[1], Y, X=Xs[i], likelihood=likelihood, num_inducing=num_inducing[i], init=inits[i], kernel=kernels[i] if kernels is not None else None, back_constraint=back_constraint, mpi_comm=mpi_comm, mpi_root=mpi_root))
+                    self.layers.append(ObservedMRDLayer(nDims[0],
+                                                        nDims[1], Y,
+                                                        X=Xs[i], likelihood=likelihood,
+                                                        num_inducing=num_inducing[i],
+                                                        init=inits[i],
+                                                        kernel=kernels[i] if kernels is not None else None,
+                                                        back_constraint=back_constraint,
+                                                        mpi_comm=mpi_comm,
+                                                        mpi_root=mpi_root))
                 else:
                     if self.X_observed and self.repeatX:
                         # self.layers.append(ObservedLayer(nDims[0],nDims[1], Y, X=Xs[i], likelihood=likelihood, num_inducing=num_inducing[i], init=inits[i], kernel=kernels[i] if kernels is not None else None, back_constraint=back_constraint, inference_method=inference_method, mpi_comm=mpi_comm, mpi_root=mpi_root))
-                        self.layers.append(ObservedLayer(nDims[0],Xs[i].shape[1], Y, X=Xs[i], likelihood=likelihood, num_inducing=num_inducing[i], init=inits[i], kernel=kernels[i] if kernels is not None else None, back_constraint=back_constraint, inference_method=inference_method, mpi_comm=mpi_comm, mpi_root=mpi_root, auto_update=auto_update, repeatX=True, repeatXsplit=self.nDimsOrig[1]))
+                        self.layers.append(ObservedLayer(nDims[0],
+                                                         Xs[i].shape[1],
+                                                         Y, X=Xs[i], likelihood=likelihood,
+                                                         num_inducing=num_inducing[i],
+                                                         init=inits[i],
+                                                         kernel=kernels[i] if kernels is not None else None,
+                                                         back_constraint=back_constraint,
+                                                         inference_method=inference_method,
+                                                         mpi_comm=mpi_comm,
+                                                         mpi_root=mpi_root,
+                                                         auto_update=auto_update,
+                                                         repeatX=True,
+                                                         repeatXsplit=self.nDimsOrig[1]))
                         self.layers[-1].X_dim_free = range(self.nDimsOrig[1])
-                        self.layers[-1].X_dim_top  = np.arange(self.nDimsOrig[1],self.nDimsOrig[1]+X.shape[1]).tolist()
+                        self.layers[-1].X_dim_top  = np.arange(self.nDimsOrig[1],
+                                                               self.nDimsOrig[1]+X.shape[1]).tolist()
                     else:
-                        self.layers.append(ObservedLayer(nDims[0],nDims[1], Y, X=Xs[i], likelihood=likelihood, num_inducing=num_inducing[i], init=inits[i], kernel=kernels[i] if kernels is not None else None, back_constraint=back_constraint, inference_method=inference_method, mpi_comm=mpi_comm, mpi_root=mpi_root, auto_update=auto_update))
+                        self.layers.append(ObservedLayer(nDims[0],nDims[1],
+                                                         Y, X=Xs[i], likelihood=likelihood,
+                                                         num_inducing=num_inducing[i],
+                                                         init=inits[i],
+                                                         kernel=kernels[i] if kernels is not None else None,
+                                                         back_constraint=back_constraint,
+                                                         inference_method=inference_method,
+                                                         mpi_comm=mpi_comm, mpi_root=mpi_root,
+                                                         auto_update=auto_update))
             elif i==self.nLayers-1:
                 if isinstance(X, VariationalPosterior):
                     X_variance, uncertain_inputs = X.variance.values, True
                 else:
                     X_variance, uncertain_inputs = None, X is None
-                self.layers.append(TopHiddenLayer(self.layers[-1],nDims[i+1], num_inducing=num_inducing[i], X=Xs[i], X_variance=X_variance, uncertain_inputs=uncertain_inputs,
-                    name='layer_'+str(i), init=inits[i], kernel=kernels[i] if kernels is not None else None, inference_method=inference_method, mpi_comm=mpi_comm, mpi_root=mpi_root, back_constraint=True if uncertain_inputs and back_constraint else False, auto_update=auto_update))
+                self.layers.append(TopHiddenLayer(self.layers[-1],
+                                                  nDims[i+1],
+                                                  num_inducing=num_inducing[i],
+                                                  X=Xs[i], X_variance=X_variance,
+                                                  uncertain_inputs=uncertain_inputs,
+                                                  name='layer_'+str(i),
+                                                  init=inits[i],
+                                                  kernel=kernels[i] if kernels is not None else None,
+                                                  back_constraint=True if uncertain_inputs and back_constraint else False,
+                                                  inference_method=inference_method,
+                                                  mpi_comm=mpi_comm, mpi_root=mpi_root,
+                                                  auto_update=auto_update))
             else:
-                self.layers.append(HiddenLayer(self.layers[-1],nDims[i+1], X=Xs[i], num_inducing=num_inducing[i], name='layer_'+str(i), init=inits[i], kernel=kernels[i] if kernels is not None else None, back_constraint=back_constraint, inference_method=inference_method, mpi_comm=mpi_comm, mpi_root=mpi_root, auto_update=auto_update)) 
+                self.layers.append(HiddenLayer(self.layers[-1],
+                                               nDims[i+1], X=Xs[i],
+                                               num_inducing=num_inducing[i],
+                                               name='layer_'+str(i), init=inits[i],
+                                               kernel=kernels[i] if kernels is not None else None,
+                                               back_constraint=back_constraint,
+                                               inference_method=inference_method,
+                                               mpi_comm=mpi_comm, mpi_root=mpi_root,
+                                               auto_update=auto_update)) 
         if self.nLayers==1:
             self.layers[0].set_as_toplayer()
         
@@ -107,8 +160,12 @@ class DeepGP(Model):
             from ..layers import EncoderLayer 
             direction = 'top_down' if self.X_observed else 'bottom_up'
             if self.X_observed:
-                self.enclayers = [ EncoderLayer(self.layers[i], direction=direction, encoder_dims=encoder_dims[i-1] if encoder_dims is not None else None, mpi_comm = mpi_comm, mpi_root=mpi_root,
-                                            name='enclayer_'+str(i)) for i in range(self.nLayers-1,0,-1)]
+                self.enclayers = [EncoderLayer(self.layers[i],
+                                               direction=direction,
+                                               encoder_dims=encoder_dims[i-1] if encoder_dims is not None else None,
+                                               mpi_comm = mpi_comm,
+                                               mpi_root=mpi_root,
+                                               name='enclayer_'+str(i)) for i in range(self.nLayers-1,0,-1)]
             else:
                 self.enclayers = [ EncoderLayer(self.layers[i], direction=direction, encoder_dims=encoder_dims[i] if encoder_dims is not None else None, mpi_comm = mpi_comm, mpi_root=mpi_root,
                                             name='enclayer_'+str(i)) for i in range(self.nLayers)]
@@ -131,6 +188,7 @@ class DeepGP(Model):
         return self.layers[-1].X
 
     def _init_Xs(self, Ya, Xa):
+        
         if isinstance(Ya,list):
             return [None for d in self.nDims[1:]]
         else:
@@ -157,8 +215,8 @@ class DeepGP(Model):
                     X_mid2 = np.hstack((X_mid, X))
                     # Should we re-normalize everything????
                     Xmean, Xstd = X_mid2.mean(0), X_mid2.std(0)+1e-20
-                    X_mid2 -= Xmean[None,:]
-                    X_mid2 /= Xstd[None,:]
+                    X_mid2 -= Xmean[np.newaxis,:]
+                    X_mid2 /= Xstd[np.newaxis,:]
 
                     self.repeatX_Xmean = Xmean.copy()[X_mid.shape[1]:]
                     self.repeatX_Xstd = Xstd.copy()[X_mid.shape[1]:]
@@ -192,19 +250,33 @@ class DeepGP(Model):
             if self.mpi_comm is not None:
                 [l._gather_gradients() for l in self.enclayers]
         
-    def add_layer(self,dim_up, X=None, X_variance=None, Z=None, uncertain_inputs=True, num_inducing=10, kernel=None, inference_method=None, noise_var=1e-2, init='rand', MLP_dims=None, back_constraint=True,  name='tophiddenlayer'):
+    def add_layer(self, dim_up, X=None,
+                  X_variance=None, Z=None,
+                  uncertain_inputs=True, num_inducing=10,
+                  kernel=None, inference_method=None,
+                  noise_var=1e-2, init='rand', MLP_dims=None,
+                  back_constraint=True,  name='tophiddenlayer'):
+        """Add a layer"""
         ls = []
         if isinstance(self.layers[-1], TopHiddenLayer):
-            layer = HiddenLayer.from_TopHiddenLayer(self.layers[-1], name='layer_'+str(self.nLayers-1))
+            layer = HiddenLayer.from_TopHiddenLayer(self.layers[-1],
+                                                    name='layer_'+str(self.nLayers-1))
             self.unlink_parameter(self.layers[-1])
             self.layers.pop(-1)
             self.layers.append(layer)
             ls.append(layer)
         elif isinstance(self.layers[-1], ObservedLayer):
             self.layers[0].set_as_toplayer(False)
-        self.layers.append(TopHiddenLayer(self.layers[-1], dim_up, num_inducing=num_inducing, name='layer_'+str(self.nLayers), init=init, 
-                                          kernel=kernel, noise_var=noise_var, MLP_dims=MLP_dims, mpi_comm=self.mpi_comm, mpi_root=self.mpi_root,
-                                          back_constraint=back_constraint, X=X, X_variance=X_variance, Z=Z, uncertain_inputs=uncertain_inputs))
+            
+        self.layers.append(TopHiddenLayer(self.layers[-1], dim_up,
+                                          num_inducing=num_inducing,
+                                          name='layer_'+str(self.nLayers), init=init, 
+                                          kernel=kernel, noise_var=noise_var,
+                                          MLP_dims=MLP_dims, mpi_comm=self.mpi_comm,
+                                          mpi_root=self.mpi_root,
+                                          back_constraint=back_constraint, X=X,
+                                          X_variance=X_variance, Z=Z,
+                                          uncertain_inputs=uncertain_inputs))
         ls.append(self.layers[-1])
         self.nLayers += 1
         self.nDims.append(dim_up)
@@ -267,6 +339,7 @@ class DeepGP(Model):
             else: return None
         
     def predict(self, Xnew, full_cov=False, Y_metadata=None, kern=None):
+        """Make a prediction from the deep Gaussian process model for a given input"""
         from GPy.core.parameterization.variational import NormalPosterior
         
         if self.repeatX:
@@ -346,7 +419,7 @@ class DeepGP(Model):
         m, v = self.predict(X,  full_cov=False)
         return self.layers[0].likelihood.predictive_quantiles(m, v-self.layers[0].likelihood.variance, quantiles, Y_metadata=Y_metadata)
 
-    def append_XY(self,Y, X):
+    def append_XY(self, Y, X):
         from GPy import ObsAr
         assert self.X_observed
         self.update_model(False)
@@ -356,5 +429,3 @@ class DeepGP(Model):
             l.layer_lower.set_newX(NormalPosterior(y_mean, np.ones_like(y_mean)*y_var), append=True)
         self.layers[0].Y = ObsAr(np.vstack([self.layers[0].Y, Y]))
         self.update_model(True)
-
-
