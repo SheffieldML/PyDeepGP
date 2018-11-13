@@ -50,7 +50,7 @@ back_constraint = False
 # Dimensions of the MLP back-constraint if set to true
 encoder_dims=[[300],[150]]
 
-m = deepgp.DeepGP([Y_tr.shape[1],Q,X_tr.shape[1]],Y_tr, X_tr=X_tr,kernels=[kern1, kern2], num_inducing=num_inducing, back_constraint=back_constraint)
+m = deepgp.DeepGP([Y_tr.shape[1],Q,X_tr.shape[1]],Y_tr, X=X_tr,kernels=[kern1, kern2], num_inducing=num_inducing, back_constraint=back_constraint)
 
 
 
