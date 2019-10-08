@@ -64,6 +64,8 @@ target/
 .settings
 .project
 .pydevproject
+.mypy_cache/
+
 # VibeSafe System Files (Auto-added during installation)
 # These are VibeSafe infrastructure - not your project content
 
