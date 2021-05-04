@@ -42,7 +42,7 @@ Y_ts = Y_all_ts[:, 55:].copy()
 Q = 5
 # Define what kernels to use per layer
 kern1 = GPy.kern.RBF(Q,ARD=True) + GPy.kern.Bias(Q)
-kern2 = GPy.kern.RBF(Q,ARD=False) + GPy.kern.Bias(X_tr.shape[1])
+kern2 = GPy.kern.RBF(X_tr.shape[1],ARD=False) + GPy.kern.Bias(X_tr.shape[1])
 # Number of inducing points to use
 num_inducing = 40
 # Whether to use back-constraint for variational posterior
@@ -85,6 +85,7 @@ Y_pred = m.predict(X_ts)[0]
 Y_pred_s = m.predict_withSamples(X_ts, nSamples=500)[0]
 Y_pred_GP = m_GP.predict(X_ts)[0]
 
+# DeepGP isn't expected to outperform GPs always (especially on simple problems like this one here)
 print('# RMSE DGP               : ' + str(rmse(Y_pred, Y_ts)))
 print('# RMSE DGP (with samples): ' + str(rmse(Y_pred_s, Y_ts)))
 print('# RMSE GP                : ' + str(rmse(Y_pred_GP, Y_ts)))
