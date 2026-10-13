@@ -5,7 +5,7 @@
 import sys
 import numpy as np
 from scipy.linalg import LinAlgError
-from GPy import Model,likelihoods
+from GPy import Model, likelihoods
 from GPy.core.parameterization.variational import VariationalPosterior, NormalPosterior
 from ..layers import ObservedLayer, ObservedMRDLayer, HiddenLayer, TopHiddenLayer
 
