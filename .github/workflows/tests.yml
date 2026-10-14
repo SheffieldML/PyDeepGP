@@ -3,7 +3,6 @@ name: Tests
 on:
   push:
     branches:
-      - master
       - main
   pull_request:
   workflow_dispatch:
@@ -31,8 +30,10 @@ jobs:
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install -e .
-          python -m pip install matplotlib h5py tables
+          # Install runtime + test deps explicitly: editable metadata from
+          # setup.py is not reliably applied by current pip/setuptools.
+          python -m pip install "numpy>=1.7" "scipy>=0.12" "GPy>=1.0" matplotlib h5py tables
+          python -m pip install -e . --no-deps
 
       - name: Run unit tests
         run: python -m unittest deepgp.testing.model_tests_basic -v

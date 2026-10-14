@@ -11,13 +11,13 @@ Currently implemented models are
 Testing
 -------
 
-GitHub Actions runs the unit tests on pull requests and pushes to `master`.
+GitHub Actions runs the unit tests on pull requests and pushes to `main`.
 
 To run the suite locally:
 
 ```bash
-python -m pip install -e .
-python -m pip install matplotlib h5py tables
+python -m pip install "numpy>=1.7" "scipy>=0.12" "GPy>=1.0" matplotlib h5py tables
+python -m pip install -e . --no-deps
 python -m unittest deepgp.testing.model_tests_basic -v
 ```
 
