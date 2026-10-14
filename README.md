@@ -6,17 +6,23 @@ The Python Implementation of Deep Gaussian Processes
 Currently implemented models are
 
 * Deep GPs
-* Variational Auto-encoded Deep GPs 
+* Variational Auto-encoded Deep GPs
 
-Testing locally
----------------
+Testing
+-------
 
-To run the PyDeepGP test suite on your own machine:
+GitHub Actions runs the unit tests on pull requests and pushes to `master`.
 
-1. Install [tox][tox]
-2. Clone this repo
-3. `cd` into this repo
-4. Run `tox` to run the test suite and report test outcomes
+To run the suite locally:
 
-[tox]: https://tox.readthedocs.io/en/latest/
+```bash
+python -m pip install -e .
+python -m pip install matplotlib h5py tables
+python -m unittest deepgp.testing.model_tests_basic -v
+```
 
+Or with [tox](https://tox.readthedocs.io/):
+
+```bash
+tox
+```

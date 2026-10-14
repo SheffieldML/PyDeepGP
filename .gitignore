@@ -71,6 +71,7 @@ target/
 
 # VibeSafe virtual environment
 .venv-vibesafe/
+.venv-test/
 
 # Backlog system files
 backlog/README.md

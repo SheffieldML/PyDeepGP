@@ -1,1 +1,4 @@
 include AUTHORS.txt
+include LICENSE
+include README.md
+recursive-include deepgp/testing *.txt *.h5

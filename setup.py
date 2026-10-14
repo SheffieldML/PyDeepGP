@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import io
 import os
 from setuptools import setup
 
@@ -22,13 +21,18 @@ setup(name = 'DGP',
       keywords = "deep learning",
       url = "",
       packages = ["deepgp",
+                  "deepgp.encoder",
                   "deepgp.inference",
                   "deepgp.layers",
                   "deepgp.util",
-                  "deepgp.models"],
+                  "deepgp.models",
+                  "deepgp.testing"],
       package_dir={'deepgp': 'deepgp'},
+      package_data={'deepgp.testing': ['*.txt', '*.h5']},
+      include_package_data=True,
       py_modules = ['deepgp.__init__'],
       long_description=read('README.md'),
+      python_requires='>=3.10',
       install_requires=[
           'numpy>=1.7',
           'scipy>=0.12',
@@ -39,7 +43,6 @@ setup(name = 'DGP',
               'matplotlib',
               'h5py',
               'tables',
-              'theano',
           ],
       },
       classifiers=['License :: OSI Approved :: BSD License',
@@ -47,9 +50,9 @@ setup(name = 'DGP',
                    'Operating System :: MacOS :: MacOS X',
                    'Operating System :: Microsoft :: Windows',
                    'Operating System :: POSIX :: Linux',
-                   'Programming Language :: Python :: 2.7',
-                   'Programming Language :: Python :: 3.5',
-                   'Programming Language :: Python :: 3.6',
-                   'Programming Language :: Python :: 3.7'
+                   'Programming Language :: Python :: 3',
+                   'Programming Language :: Python :: 3.10',
+                   'Programming Language :: Python :: 3.11',
+                   'Programming Language :: Python :: 3.12',
                    ]
       )
