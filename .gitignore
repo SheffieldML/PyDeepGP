@@ -64,11 +64,14 @@ target/
 .settings
 .project
 .pydevproject
+.mypy_cache/
+
 # VibeSafe System Files (Auto-added during installation)
 # These are VibeSafe infrastructure - not your project content
 
 # VibeSafe virtual environment
 .venv-vibesafe/
+.venv-test/
 
 # Backlog system files
 backlog/README.md

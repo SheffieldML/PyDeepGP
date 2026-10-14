@@ -11,6 +11,18 @@ import tables
 
 base_path = os.path.dirname(__file__)
 
+try:
+    import theano  # noqa: F401
+    HAS_THEANO = True
+except ImportError:
+    HAS_THEANO = False
+
+
+def _scalar_from_hdf5(node):
+    """Read a stored likelihood scalar from tables/h5py across NumPy versions."""
+    return float(np.asarray(node[:]).reshape(-1)[0])
+
+
 class DGPUnsupervisedTest(unittest.TestCase):
     """
     Normal Deep GPs without back-constraint
@@ -28,14 +40,14 @@ class DGPUnsupervisedTest(unittest.TestCase):
             m._trigger_params_changed()
             m.save(os.path.join(base_path,self.modelfile))
             with h5py.File(os.path.join(base_path,self.modelfile),'r+') as f:
-                L = f.create_dataset("L", (1,),dtype=np.float)
+                L = f.create_dataset("L", (1,),dtype=float)
                 L[:] = m._log_marginal_likelihood
                 f.close()
         
         # Load model parameters
         with tables.open_file(os.path.join(base_path,self.modelfile),'r') as f:
             m.param_array[:] = f.root.param_array[:]
-            L = float(f.root.L[:])
+            L = _scalar_from_hdf5(f.root.L)
             m._trigger_params_changed()
             f.close()
         self.model = m
@@ -66,14 +78,14 @@ class DGPSupervisedTest(unittest.TestCase):
             m._trigger_params_changed()
             m.save(os.path.join(base_path,self.modelfile))
             with h5py.File(os.path.join(base_path,self.modelfile),'r+') as f:
-                L = f.create_dataset("L", (1,),dtype=np.float)
+                L = f.create_dataset("L", (1,),dtype=float)
                 L[:] = m._log_marginal_likelihood
                 f.close()
                         
         # Load model parameters
         with tables.open_file(os.path.join(base_path,self.modelfile),'r') as f:
             m.param_array[:] = f.root.param_array[:]
-            L = float(f.root.L[:])
+            L = _scalar_from_hdf5(f.root.L)
             m._trigger_params_changed()
             f.close()
         self.model = m
@@ -86,6 +98,7 @@ class DGPSupervisedTest(unittest.TestCase):
         self.assertTrue(np.allclose(float(self.model._log_marginal_likelihood), self.L, rtol=1e-05, atol=1e-08), str(float(self.model._log_marginal_likelihood))+', '+str(self.L))
 
 
+@unittest.skipUnless(HAS_THEANO, "back-constraint encoder requires theano")
 class DGP_BC_UnsupervisedTest(unittest.TestCase):
     """
     Normal Deep GPs with back-constraint
@@ -103,14 +116,14 @@ class DGP_BC_UnsupervisedTest(unittest.TestCase):
             m._trigger_params_changed()
             m.save(os.path.join(base_path,self.modelfile))
             with h5py.File(os.path.join(base_path,self.modelfile),'r+') as f:
-                L = f.create_dataset("L", (1,),dtype=np.float)
+                L = f.create_dataset("L", (1,),dtype=float)
                 L[:] = m._log_marginal_likelihood
                 f.close()
         
         # Load model parameters
         with tables.open_file(os.path.join(base_path,self.modelfile),'r') as f:
             m.param_array[:] = f.root.param_array[:]
-            L = float(f.root.L[:])
+            L = _scalar_from_hdf5(f.root.L)
             m._trigger_params_changed()
             f.close()
         self.model = m
@@ -122,6 +135,7 @@ class DGP_BC_UnsupervisedTest(unittest.TestCase):
     def test_checkLogLikelihood(self):
         self.assertTrue(np.allclose(float(self.model._log_marginal_likelihood), self.L, rtol=1e-05, atol=1e-08), str(float(self.model._log_marginal_likelihood))+', '+str(self.L))
 
+@unittest.skipUnless(HAS_THEANO, "back-constraint encoder requires theano")
 class DGP_BC_SupervisedTest(unittest.TestCase):
     """
     Normal Deep GPs with back-constraint
@@ -141,14 +155,14 @@ class DGP_BC_SupervisedTest(unittest.TestCase):
             m._trigger_params_changed()
             m.save(os.path.join(base_path,self.modelfile))
             with h5py.File(os.path.join(base_path,self.modelfile),'r+') as f:
-                L = f.create_dataset("L", (1,),dtype=np.float)
+                L = f.create_dataset("L", (1,),dtype=float)
                 L[:] = m._log_marginal_likelihood
                 f.close()
                         
         # Load model parameters
         with tables.open_file(os.path.join(base_path,self.modelfile),'r') as f:
             m.param_array[:] = f.root.param_array[:]
-            L = float(f.root.L[:])
+            L = _scalar_from_hdf5(f.root.L)
             m._trigger_params_changed()
             f.close()
         self.model = m
