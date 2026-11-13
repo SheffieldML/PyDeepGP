@@ -16,7 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        # GPy >=1.15 requires Python >=3.11.5
+        python-version: ['3.11', '3.12', '3.13']
 
     steps:
       - name: Checkout
@@ -32,8 +33,15 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           # Install runtime + test deps explicitly: editable metadata from
           # setup.py is not reliably applied by current pip/setuptools.
-          python -m pip install "numpy>=1.7" "scipy>=0.12" "GPy>=1.0" matplotlib h5py tables
+          python -m pip install "numpy>=1.7" "scipy>=0.12" "GPy>=1.15" matplotlib h5py tables "coverage>=7.0"
           python -m pip install -e . --no-deps
 
-      - name: Run unit tests
-        run: python -m unittest deepgp.testing.model_tests_basic -v
+      - name: Run unit tests with coverage
+        run: |
+          python -m coverage run -m unittest discover -s deepgp/testing -p 'test*.py' -v
+          # Gate is on the maintained serial DeepGP surface (.coveragerc omits).
+          python -m coverage report --fail-under=60
+
+      - name: Upload coverage XML
+        if: always()
+        run: python -m coverage xml -o coverage.xml

@@ -394,14 +394,22 @@ class HiddenLayer(Layer):
             encoder.param_array[:] = layer.encoder.param_array
         else:
             encoder = None
-            
+
+        noise_var = np.asarray(layer.likelihood.variance).reshape(-1)[0]
+        if isinstance(layer.X, VariationalPosterior):
+            X = layer.X.mean.values
+            X_variance = layer.X.variance.values
+        else:
+            X = np.asarray(layer.X)
+            X_variance = None
         return HiddenLayer(layer.layer_lower, layer.dim_up,
-                           X=layer.X.mean.values, X_variance=layer.X.variance.values,
-                           Z=layer.Z.values, 
-                            num_inducing=layer.Z.shape[1],
+                           X=X, X_variance=X_variance,
+                           Z=layer.Z.values,
+                           num_inducing=layer.Z.shape[0],
                            kernel=layer.kern.copy(),
-                           inference_method=None, encoder = encoder, 
-                            noise_var=layer.likelihood.variance.values,
+                           inference_method=None, encoder=encoder,
+                           noise_var=noise_var,
+                           back_constraint=layer.back_constraint,
                            mpi_comm=layer.mpi_comm, mpi_root=layer.mpi_root,
                            auto_update=layer.auto_update, name=name)
         
