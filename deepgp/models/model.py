@@ -29,7 +29,8 @@ class DeepGP(Model):
                  likelihood = None, inits='PCA', name='deepgp',
                  kernels=None, obs_data='cont', back_constraint=True,
                  encoder_dims=None, mpi_comm=None, mpi_root=0, repeatX=False,
-                 inference_method=None, **kwargs):
+                 inference_method=None, psi_chunk_size=None, psi_threads=1,
+                 **kwargs):
         super(DeepGP, self).__init__(name=name)
         self._IN_OPTIMIZATION_ = False
         
@@ -49,6 +50,8 @@ class DeepGP(Model):
                 )
         
         self.mpi_comm, self.mpi_root = mpi_comm, mpi_root
+        self.psi_chunk_size = psi_chunk_size
+        self.psi_threads = 1 if psi_threads is None else int(psi_threads)
         self.obs_data = obs_data
         self.nLayers = len(nDims)-1
         self.nDims = nDims
@@ -128,7 +131,9 @@ class DeepGP(Model):
                                                          mpi_root=mpi_root,
                                                          auto_update=auto_update,
                                                          repeatX=True,
-                                                         repeatXsplit=self.nDimsOrig[1]))
+                                                         repeatXsplit=self.nDimsOrig[1],
+                                                         psi_chunk_size=psi_chunk_size,
+                                                         psi_threads=self.psi_threads))
                         self.layers[-1].X_dim_free = range(self.nDimsOrig[1])
                         self.layers[-1].X_dim_top  = np.arange(self.nDimsOrig[1],
                                                                self.nDimsOrig[1]+X.shape[1]).tolist()
@@ -141,7 +146,9 @@ class DeepGP(Model):
                                                          back_constraint=back_constraint,
                                                          inference_method=inference_method,
                                                          mpi_comm=mpi_comm, mpi_root=mpi_root,
-                                                         auto_update=auto_update))
+                                                         auto_update=auto_update,
+                                                         psi_chunk_size=psi_chunk_size,
+                                                         psi_threads=self.psi_threads))
             elif i==self.nLayers-1:
                 if isinstance(X, VariationalPosterior):
                     X_variance, uncertain_inputs = X.variance.values, True
@@ -158,7 +165,9 @@ class DeepGP(Model):
                                                   back_constraint=True if uncertain_inputs and back_constraint else False,
                                                   inference_method=inference_method,
                                                   mpi_comm=mpi_comm, mpi_root=mpi_root,
-                                                  auto_update=auto_update))
+                                                  auto_update=auto_update,
+                                                  psi_chunk_size=psi_chunk_size,
+                                                  psi_threads=self.psi_threads))
             else:
                 self.layers.append(HiddenLayer(self.layers[-1],
                                                nDims[i+1], X=Xs[i],
@@ -168,7 +177,9 @@ class DeepGP(Model):
                                                back_constraint=back_constraint,
                                                inference_method=inference_method,
                                                mpi_comm=mpi_comm, mpi_root=mpi_root,
-                                               auto_update=auto_update)) 
+                                               auto_update=auto_update,
+                                               psi_chunk_size=psi_chunk_size,
+                                               psi_threads=self.psi_threads))
         if self.nLayers==1:
             self.layers[0].set_as_toplayer()
         
@@ -294,7 +305,9 @@ class DeepGP(Model):
                                           mpi_root=self.mpi_root,
                                           back_constraint=back_constraint, X=X,
                                           X_variance=X_variance, Z=Z,
-                                          uncertain_inputs=uncertain_inputs))
+                                          uncertain_inputs=uncertain_inputs,
+                                          psi_chunk_size=self.psi_chunk_size,
+                                          psi_threads=self.psi_threads))
         ls.append(self.layers[-1])
         self.nLayers += 1
         self.nDims.append(dim_up)

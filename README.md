@@ -47,3 +47,15 @@ single-machine role of MPI. ``mpi_comm`` with ``back_constraint=False`` raises
 ``ValueError`` (that configuration produced silently wrong results).
 
 An optional GitHub Actions job runs a 2-rank parity check while MPI remains.
+
+Psi chunking (optional)
+-----------------------
+
+Large-N models can bound memory and use multiple cores via GPy's chunked RBF /
+linear psi-statistics (CIP-0001 Phase 3)::
+
+    m = deepgp.DeepGP(..., psi_chunk_size=500, psi_threads=4)
+
+Defaults (``psi_chunk_size=None``, ``psi_threads=1``) preserve previous
+behaviour. Threading runs inside GPy's pure psi helpers; PyDeepGP itself stays
+serial at the kernel API.
