@@ -286,33 +286,18 @@ class DeepGP(Model):
         self.link_parameters(*ls)
         
     def gen_pred_model(self, Y=None, init_X='encoder', binObserved=False):
-        from GPy.core.parameterization.variational import NormalPosterior
-        from deepgp.models.pred_model import PredDeepGP
-        
-        if Y is not None:
-            Xs = [Y]
-            
-            if init_X=='nn':
-                xy = self.collect_all_XY()
-                for i in range(self.nLayers):
-                    x_mean, x_var = PredDeepGP._init_Xs_NN(Y,i,xy)
-                    Xs.append(NormalPosterior(x_mean, x_var))
-            elif init_X=='encoder':
-                x_mean = Y
-                x_mean[np.isnan(x_mean)] = 0.
-                for layer in self.layers:
-                    x_mean = layer.encoder.predict(x_mean)
-                    Xs.append(NormalPosterior(x_mean, np.ones(x_mean.shape)*layer.X_var))
-        
-        layers = []
-        layer_lower = None
-        for i in range(self.nLayers):
-            layers.append(self.layers[i].gen_pred_layer(layer_lower=layer_lower,Y=Xs[i], X=Xs[i+1], binObserved=(i==0 and binObserved)))
-            layer_lower = layers[-1]
-        
-        pmodel = PredDeepGP(layers)
-        if init_X=='nn': pmodel.set_train_data(xy)
-        return pmodel
+        """Build a prediction-only DeepGP.
+
+        This entry point historically depended on ``deepgp.models.pred_model``
+        and ``PredLayer`` / ``BinaryPredLayer``, which are not present in this
+        repository (see GitHub issue #31). Use ``predict`` /
+        ``predict_withSamples`` instead.
+        """
+        raise NotImplementedError(
+            "gen_pred_model requires PredDeepGP / PredLayer modules that are "
+            "not shipped in this repository (https://github.com/SheffieldML/PyDeepGP/issues/31). "
+            "Use DeepGP.predict or DeepGP.predict_withSamples instead."
+        )
     
     def collect_all_XY(self, root=0):
         if self.mpi_comm is None:

@@ -266,40 +266,17 @@ class Layer(SparseGP_MPI):
             self.update_qX_gradients()
             
     def gen_pred_layer(self, layer_lower=None, Y=None, X=None, binObserved=False):
-        from .pred_layers import PredLayer, BinaryPredLayer
-        from deepgp.encoder.mlp import MLP
-        from ..inference import SVI_Ratio, SVI_Ratio_Binary
-        from copy import deepcopy
-        
-        X = self.X.copy() if X is None else X
-        Y = self.Y.copy() if Y is None else Y
-        Z = self.Z.values.copy()
-        X_var = self.X_var.values.copy() if self.back_constraint else None
-        encoder = MLP.clone(self.encoder) if self.back_constraint else None
-        kernel = self.kern.copy()
-        likelihood = self.likelihood.copy()
-        posterior = deepcopy(self.posterior)
-        variationalterm = NormalPrior() if isinstance(self.variationalterm, NormalPrior) else NormalEntropy()
-        
-        if binObserved:
-            layer = BinaryPredLayer(X, Y, kernel, Z,
-                                    posterior,
-                                    likelihood=likelihood,
-                                    layer_lower=layer_lower,
-                                    inference_method=SVI_Ratio_Binary(), 
-                                    variationalterm=variationalterm,
-                                    X_var=X_var,
-                                    encoder=encoder,
-                                    name=self.name)
-        else:
-            layer = PredLayer(X, Y, kernel, Z, posterior,
-                              likelihood=likelihood,
-                              layer_lower=layer_lower,
-                              inference_method=SVI_Ratio(), 
-                              variationalterm=variationalterm,
-                              X_var=X_var,
-                              encoder=encoder, name=self.name)
-        return layer
+        """Build a prediction-only layer.
+
+        Historically this imported ``PredLayer`` / ``BinaryPredLayer`` from
+        ``deepgp.layers.pred_layers``, which is not present in this repository
+        (see GitHub issue #31).
+        """
+        raise NotImplementedError(
+            "gen_pred_layer requires PredLayer / BinaryPredLayer modules that "
+            "are not shipped in this repository "
+            "(https://github.com/SheffieldML/PyDeepGP/issues/31)."
+        )
     
     def set_newX(self, X, append=False):
         from GPy import ObsAr
