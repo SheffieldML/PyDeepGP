@@ -19,7 +19,8 @@ Paper: [Damianou & Lawrence, AISTATS 2013](https://proceedings.mlr.press/v31/dam
 | §4.3 figs. 6–8 | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SheffieldML/PyDeepGP/blob/main/examples/damianou2013/notebooks/03_usps_digits.ipynb) [03](notebooks/03_usps_digits.ipynb) | `demUsps.m` / `demDigitsDemonstration.m` |
 | §4.2 figs. 4–5 | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SheffieldML/PyDeepGP/blob/main/examples/damianou2013/notebooks/04_highfive_mrd.ipynb) [04](notebooks/04_highfive_mrd.ipynb) | `demHighFiveDemonstration.m` |
 
-Until this PR is on `main`, open Colab from the branch, e.g.
+Notebooks are walkthroughs (data → fit → plots), not wrappers around the
+`.py` scripts. Until this lands on `main`, open Colab from the branch, e.g.
 `…/blob/examples-damianou2013/examples/damianou2013/notebooks/…`.
 
 ## Scripts
