@@ -1,0 +1,7 @@
+# Notebook cleanup: strip outputs / execution counts before commit.
+# Install once: pip install pre-commit && pre-commit install
+repos:
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.2
+    hooks:
+      - id: nbstripout
