@@ -91,7 +91,5 @@ Examples
 --------
 
 * ``examples/`` — short supervised / unsupervised demos (oil, CMU walk/jog).
-* ``examples/damianou2013/`` — recreations of the feasible AISTATS 2013
-  experiments (toy hierarchy, warped regression, USPS depth/ARD). The CMU
-  high-five shared-view experiment still needs an MRD revival; see that
-  directory's README.
+* ``examples/damianou2013/`` — recreations of the AISTATS 2013 experiments
+  (toy hierarchy, warped regression, USPS depth/ARD, high-five / MRD).

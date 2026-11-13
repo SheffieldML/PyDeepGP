@@ -3,8 +3,7 @@
 
 Two correlated observation views share a parent latent layer. This is the
 architecture used for the Damianou & Lawrence (2013) high-five experiment;
-see also ``examples/damianou2013/highfive_shared.py`` when that suite is
-present.
+see also ``examples/damianou2013/highfive_shared.py``.
 """
 
 from __future__ import annotations

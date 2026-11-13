@@ -15,7 +15,7 @@ Matlab stack. Use `--quick` for a short smoke run.
 | §4.1 Toy hierarchy (fig. 2) | `toy_hierarchy.py` | Runnable |
 | §4.1 Warped regression (fig. 3) | `toy_warped_regression.py` | Runnable |
 | §4.3 USPS {0,1,6} depth / ARD / 1-NN (figs. 6–8) | `usps_digits.py` | Runnable (downloads ESL `zip.train`) |
-| §4.2 CMU high-five shared views (figs. 4–5) | `highfive_shared.py` | Documented gap — MRD currently fails at bound aggregation; `--force-mrd` reports the error |
+| §4.2 CMU high-five shared views (figs. 4–5) | `highfive_shared.py` | Runnable via CIP-0002 MRD (synthetic or pods stand-in) |
 
 ## Setup
 
@@ -36,7 +36,7 @@ cd examples/damianou2013
 python toy_hierarchy.py --quick --no-plot
 python toy_warped_regression.py --quick --no-plot
 python usps_digits.py --quick --no-plot --depths 1 2
-python highfive_shared.py          # prints status; exit code 2
+python highfive_shared.py --quick --no-plot --synthetic
 ```
 
 Save figures without interactive display:
@@ -54,12 +54,12 @@ python toy_warped_regression.py --repeats 10 --outdir /tmp/dgp2013
 python usps_digits.py --depths 1 2 3 4 5 --outdir /tmp/dgp2013
 ```
 
-## High-five / MRD gap
+## High-five / MRD
 
 The high-five experiment uses **conditionally independent observation views**
-with a shared parent latent layer. That construction is still present as
-`ObservedMRDLayer`, but it is outside CI coverage. `highfive_shared.py`
-explains the gap; `--force-mrd` attempts an exploratory fit only.
+with a shared parent latent layer (`ObservedMRDLayer`, CIP-0002).
+`highfive_shared.py` fits that model; use `--synthetic` when MOCAP data are
+unavailable. See also ``examples/example_mrd.py``.
 
 ## Citation
 
