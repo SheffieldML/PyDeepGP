@@ -59,6 +59,7 @@ class DeepGP(Model):
 
         # Manifold relevance determination
         mrd_flag = isinstance(Y,(list,tuple))
+        self._mrd = mrd_flag
         if mrd_flag:
             assert isinstance(nDims[0], (list,tuple)), "The data dimension for outputs has to be a list or tuple for MRD!"
         else:
@@ -105,8 +106,9 @@ class DeepGP(Model):
         for i in range(self.nLayers):
             if i==0:
                 if mrd_flag:#isinstance(nDims[0], (list,tuple)):
-                    # MRD
-                    #raise NotImplementedError()
+                    # MRD: encoder_dims[0] is a list of per-view MLP hidden sizes
+                    # (see CIP-0002). Higher indices feed EncoderLayer as usual.
+                    mrd_mlp_dims = encoder_dims[0] if encoder_dims is not None else None
                     self.layers.append(ObservedMRDLayer(nDims[0],
                                                         nDims[1], Y,
                                                         X=Xs[i], likelihood=likelihood,
@@ -114,6 +116,7 @@ class DeepGP(Model):
                                                         init=inits[i],
                                                         kernel=kernels[i] if kernels is not None else None,
                                                         back_constraint=back_constraint,
+                                                        MLP_dims=mrd_mlp_dims,
                                                         mpi_comm=mpi_comm,
                                                         mpi_root=mpi_root))
                 else:
@@ -194,8 +197,11 @@ class DeepGP(Model):
                                                mpi_root=mpi_root,
                                                name='enclayer_'+str(i)) for i in range(self.nLayers-1,0,-1)]
             else:
+                # For MRD, layer 0 owns per-view encoders inside ObservedMRDLayer;
+                # EncoderLayer starts at layer 1 (CIP-0002 Phase C).
+                enc_start = 1 if mrd_flag else 0
                 self.enclayers = [ EncoderLayer(self.layers[i], direction=direction, encoder_dims=encoder_dims[i] if encoder_dims is not None else None, mpi_comm = mpi_comm, mpi_root=mpi_root,
-                                            name='enclayer_'+str(i)) for i in range(self.nLayers)]
+                                            name='enclayer_'+str(i)) for i in range(enc_start, self.nLayers)]
             self.link_parameters(*(self.enclayers+self.layers))
         else:
             self.link_parameters(*self.layers)
@@ -271,8 +277,14 @@ class DeepGP(Model):
         
     def parameters_changed(self):
         if not self.auto_update: [l.update_layer() for l in self.layers]
-        self._log_marginal_likelihood = np.sum([l._log_marginal_likelihood for l in self.layers])
+        # Coerce to a Python float so mixed scalar / shape-(1,) layer bounds
+        # (historical MRD vs SparseGP) cannot raise under NumPy (CIP-0002 D1).
+        self._log_marginal_likelihood = float(np.sum(
+            [np.asarray(l._log_marginal_likelihood).sum() for l in self.layers]
+        ))
         if self.back_constraint:
+            if self._mrd and hasattr(self.layers[0], 'update_encoder_gradients'):
+                self.layers[0].update_encoder_gradients()
             [l.update_gradients() for l in self.enclayers[::-1]]
             if self.mpi_comm is not None:
                 [l._gather_gradients() for l in self.enclayers]
