@@ -8,8 +8,9 @@ Run under MPI::
 
     mpiexec -n 2 python -m deepgp.testing.mpi_parity
 
-Exits 0 when the MPI log-likelihood on root matches the serial reference
-within a relative tolerance; otherwise exits 1.
+Builds a partitioned MPI model, copies its parameters onto a serial model with
+the full dataset (so the comparison is not confounded by independent random
+initialisation), then checks that log-likelihoods agree.
 """
 
 from __future__ import print_function
@@ -62,20 +63,23 @@ def main():
     Y_local = np.ascontiguousarray(Y_all[sl])
     X_local = np.ascontiguousarray(X_all[sl])
 
-    serial_ll = None
-    if rank == 0:
-        m_serial = _build_model(Y_all, X_all, mpi_comm=None)
-        serial_ll = float(m_serial.log_likelihood())
-    serial_ll = comm.bcast(serial_ll, root=0)
-
+    # Independent seeds per rank; root values are broadcast inside DeepGP.
+    np.random.seed(1000 + rank)
     m_mpi = _build_model(Y_local, X_local, mpi_comm=comm)
-    # After internal Allreduce of psi statistics, root holds the global objective.
-    mpi_obj = float(m_mpi.log_likelihood()) if rank == 0 else None
+    mpi_ll = float(m_mpi.log_likelihood()) if rank == 0 else None
+
     if rank == 0:
-        rel = abs(mpi_obj - serial_ll) / max(1.0, abs(serial_ll))
+        np.random.seed(7)
+        m_serial = _build_model(Y_all, X_all, mpi_comm=None)
+        # Same parameters as the MPI model (full data, serial inference).
+        m_serial.param_array[:] = m_mpi.param_array
+        m_serial.trigger_update()
+        serial_ll = float(m_serial.log_likelihood())
+
+        rel = abs(mpi_ll - serial_ll) / max(1.0, abs(serial_ll))
         print('serial_ll={:.10g} mpi_ll={:.10g} rel_diff={:.3e}'.format(
-            serial_ll, mpi_obj, rel))
-        if not np.isfinite(mpi_obj) or rel > 1e-5:
+            serial_ll, mpi_ll, rel))
+        if not np.isfinite(mpi_ll) or not np.isfinite(serial_ll) or rel > 1e-5:
             print('MPI parity check failed', file=sys.stderr)
             return 1
         print('MPI parity check passed')
