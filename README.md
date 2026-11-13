@@ -21,6 +21,8 @@ To run the suite locally:
 python -m pip install -e ".[test]"
 # or, if editable extras are unreliable:
 python -m pip install "numpy>=1.7" "scipy>=0.12" "GPy>=1.15" matplotlib h5py tables "coverage>=7.0"
+# For psi_chunk_size / psi_threads (CIP-0001 Phase 3) until the next GPy release:
+# python -m pip install "git+https://github.com/SheffieldML/GPy.git@main"
 python -m pip install -e . --no-deps
 
 python -m coverage run -m unittest discover -s deepgp/testing -p 'test*.py' -v
