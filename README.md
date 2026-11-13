@@ -6,7 +6,7 @@ The Python Implementation of Deep Gaussian Processes
 Currently implemented models are
 
 * Deep GPs
-* Variational Auto-encoded Deep GPs
+* Variational Auto-encoded Deep GPs (NumPy MLP back-constraint; see CIP-0001)
 
 Testing
 -------
@@ -33,8 +33,6 @@ Or with [tox](https://tox.readthedocs.io/):
 tox
 ```
 
-Back-constraint encoder tests are skipped unless Theano is installed.
-
-Coverage is gated on the maintained serial DeepGP path (see `.coveragerc`).
-MPI parallel inference, MRD, Theano encoder, and prediction-only SVI helpers
-are omitted from the CI percentage until those paths are revived.
+Coverage is gated on the maintained serial DeepGP path, including the NumPy
+encoder (see `.coveragerc`). MPI parallel inference, MRD, and prediction-only
+SVI helpers remain omitted until those paths are revived (CIP-0001 Phases 2–4).
