@@ -92,4 +92,5 @@ Examples
 
 * ``examples/`` — short supervised / unsupervised demos (oil, CMU walk/jog).
 * ``examples/damianou2013/`` — recreations of the AISTATS 2013 experiments
-  (toy hierarchy, warped regression, USPS depth/ARD, high-five / MRD).
+  (toy hierarchy, warped regression, USPS depth/ARD, high-five / MRD),
+  including Colab notebooks under ``examples/damianou2013/notebooks/``.

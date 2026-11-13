@@ -1,14 +1,28 @@
 # Damianou & Lawrence (AISTATS 2013) — PyDeepGP recreations
 
-Scripts that recreate the **feasible** experiments from
+Scripts and Colab notebooks that recreate experiments from
 [Damianou & Lawrence, *Deep Gaussian Processes*](https://proceedings.mlr.press/v31/damianou13a.html)
 (AISTATS 2013) on the maintained `DeepGP` path.
 
 These are **modern recreations**, not bit-identical paper scripts: optimiser
 schedules, inducing-point counts, and initialisation differ from the 2013
-Matlab stack. Use `--quick` for a short smoke run.
+Matlab stack. Use `--quick` / `QUICK = True` for a short smoke run.
 
-## Mapping
+## Notebooks (Colab)
+
+Each notebook starts with an **Open in Colab** badge and a cell that installs
+GPy + PyDeepGP when run on Colab.
+
+| Paper section | Notebook |
+| --- | --- |
+| §4.1 fig. 2 — toy hierarchy | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SheffieldML/PyDeepGP/blob/main/examples/damianou2013/notebooks/01_toy_hierarchy.ipynb) [`01_toy_hierarchy.ipynb`](notebooks/01_toy_hierarchy.ipynb) |
+| §4.1 fig. 3 — warped regression | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SheffieldML/PyDeepGP/blob/main/examples/damianou2013/notebooks/02_toy_warped_regression.ipynb) [`02_toy_warped_regression.ipynb`](notebooks/02_toy_warped_regression.ipynb) |
+| §4.3 figs. 6–8 — USPS depth / ARD | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SheffieldML/PyDeepGP/blob/main/examples/damianou2013/notebooks/03_usps_digits.ipynb) [`03_usps_digits.ipynb`](notebooks/03_usps_digits.ipynb) |
+| §4.2 figs. 4–5 — high-five / MRD | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SheffieldML/PyDeepGP/blob/main/examples/damianou2013/notebooks/04_highfive_mrd.ipynb) [`04_highfive_mrd.ipynb`](notebooks/04_highfive_mrd.ipynb) |
+
+Locally: `jupyter notebook notebooks/01_toy_hierarchy.ipynb` (with PyDeepGP installed).
+
+## Mapping (scripts)
 
 | Paper section | Script | Status |
 | --- | --- | --- |
