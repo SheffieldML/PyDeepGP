@@ -12,6 +12,7 @@ Testing
 -------
 
 GitHub Actions runs the unit tests (with coverage) on pull requests and pushes to `main`.
+The Ubuntu / Python 3.12 job uploads ``coverage.xml`` to [Codecov](https://codecov.io).
 
 Requires **Python >=3.11** when using GPy 1.15+.
 
