@@ -66,3 +66,12 @@ linear psi-statistics (CIP-0001 Phase 3)::
 Defaults (``psi_chunk_size=None``, ``psi_threads=1``) preserve previous
 behaviour. Threading runs inside GPy's pure psi helpers; PyDeepGP itself stays
 serial at the kernel API.
+
+Examples
+--------
+
+* ``examples/`` — short supervised / unsupervised demos (oil, CMU walk/jog).
+* ``examples/damianou2013/`` — recreations of the feasible AISTATS 2013
+  experiments (toy hierarchy, warped regression, USPS depth/ARD). The CMU
+  high-five shared-view experiment still needs an MRD revival; see that
+  directory's README.
