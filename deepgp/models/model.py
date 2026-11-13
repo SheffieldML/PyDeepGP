@@ -268,11 +268,13 @@ class DeepGP(Model):
         elif isinstance(self.layers[-1], ObservedLayer):
             self.layers[0].set_as_toplayer(False)
             
+        # TopHiddenLayer takes an optional encoder, not MLP_dims. Keep MLP_dims in
+        # the signature for API compatibility with older call sites.
         self.layers.append(TopHiddenLayer(self.layers[-1], dim_up,
                                           num_inducing=num_inducing,
-                                          name='layer_'+str(self.nLayers), init=init, 
+                                          name='layer_'+str(self.nLayers), init=init,
                                           kernel=kernel, noise_var=noise_var,
-                                          MLP_dims=MLP_dims, mpi_comm=self.mpi_comm,
+                                          mpi_comm=self.mpi_comm,
                                           mpi_root=self.mpi_root,
                                           back_constraint=back_constraint, X=X,
                                           X_variance=X_variance, Z=Z,
