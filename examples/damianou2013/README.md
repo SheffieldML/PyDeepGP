@@ -1,65 +1,53 @@
-# Damianou & Lawrence (AISTATS 2013) — PyDeepGP recreations
+# Damianou & Lawrence (AISTATS 2013) — PyDeepGP ports
 
-Scripts that recreate the **feasible** experiments from
-[Damianou & Lawrence, *Deep Gaussian Processes*](https://proceedings.mlr.press/v31/damianou13a.html)
-(AISTATS 2013) on the maintained `DeepGP` path.
+Ports of the official Matlab demos in
+[SheffieldML/deepGP](https://github.com/SheffieldML/deepGP)
+(`deepGP/matlab/`). See [SOURCE.md](SOURCE.md) for the file-level mapping.
 
-These are **modern recreations**, not bit-identical paper scripts: optimiser
-schedules, inducing-point counts, and initialisation differ from the 2013
-Matlab stack. Use `--quick` for a short smoke run.
+These are **not** bit-identical to Matlab (optimiser / kernel stack differ), but
+they use the same reference data files, model widths, and evaluation metrics
+as the demos — not invented protocols.
 
-## Mapping
+Paper: [Damianou & Lawrence, AISTATS 2013](https://proceedings.mlr.press/v31/damianou13a.html).
 
-| Paper section | Script | Status |
+## Notebooks (Colab)
+
+| Paper | Notebook | Matlab demo |
 | --- | --- | --- |
-| §4.1 Toy hierarchy (fig. 2) | `toy_hierarchy.py` | Runnable |
-| §4.1 Warped regression (fig. 3) | `toy_warped_regression.py` | Runnable |
-| §4.3 USPS {0,1,6} depth / ARD / 1-NN (figs. 6–8) | `usps_digits.py` | Runnable (downloads ESL `zip.train`) |
-| §4.2 CMU high-five shared views (figs. 4–5) | `highfive_shared.py` | Runnable via CIP-0002 MRD (synthetic or pods stand-in) |
+| §4.1 fig. 2 | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SheffieldML/PyDeepGP/blob/main/examples/damianou2013/notebooks/01_toy_hierarchy.ipynb) [01](notebooks/01_toy_hierarchy.ipynb) | `demToyUnsupervised.m` |
+| §4.1 fig. 3 | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SheffieldML/PyDeepGP/blob/main/examples/damianou2013/notebooks/02_toy_warped_regression.ipynb) [02](notebooks/02_toy_warped_regression.ipynb) | `demToyRegressionSimple.m` |
+| §4.3 figs. 6–8 | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SheffieldML/PyDeepGP/blob/main/examples/damianou2013/notebooks/03_usps_digits.ipynb) [03](notebooks/03_usps_digits.ipynb) | `demUsps.m` / `demDigitsDemonstration.m` |
+| §4.2 figs. 4–5 | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SheffieldML/PyDeepGP/blob/main/examples/damianou2013/notebooks/04_highfive_mrd.ipynb) [04](notebooks/04_highfive_mrd.ipynb) | `demHighFiveDemonstration.m` |
 
-## Setup
+Notebooks are walkthroughs (data → fit → plots), not wrappers around the
+`.py` scripts. Until this lands on `main`, open Colab from the branch, e.g.
+`…/blob/examples-damianou2013/examples/damianou2013/notebooks/…`.
 
-From the repository root (Python ≥ 3.11, GPy ≥ 1.15):
+## Scripts
 
-```bash
-python -m pip install -e .
-# optional: matplotlib for figures; already a project dependency
-```
-
-USPS data are cached under `examples/damianou2013/data/zip.train.gz` on first run
-(ElemStatLearn `zip.train`).
-
-## Quick smoke tests
+| Script | Data | Notes |
+| --- | --- | --- |
+| `toy_hierarchy.py` | `data/hgplvmSampleDataTr1.mat` | Two-view DeepGP Q={6,4}; vs stacked PCA & Isomap |
+| `toy_warped_regression.py` | `hierGpsNEW` generator | Defaults = Matlab simple (N=150,D=15,Ntr=25); `--paper` → N=120,D=10 |
+| `highfive_shared.py` | `data/demHighFiveHgplvm1.mat` | YA/YB 78×62; plots vs stored hgplvm latents |
+| `usps_digits.py` | ESL `zip.train` | `vercat2` 50×{0,6,1}; Q={15,12,10,8,6}; K=80 |
 
 ```bash
 cd examples/damianou2013
 python toy_hierarchy.py --quick --no-plot
 python toy_warped_regression.py --quick --no-plot
-python usps_digits.py --quick --no-plot --depths 1 2
-python highfive_shared.py --quick --no-plot --synthetic
+python highfive_shared.py --quick --no-plot
+python usps_digits.py --quick --no-plot --depths 1
 ```
 
-Save figures without interactive display:
+Omit `--quick` for demo-scale optimisation (slow, especially USPS depth 5).
+
+## Setup
 
 ```bash
-python toy_hierarchy.py --quick --no-plot --outdir /tmp/dgp2013
+python -m pip install -e .  # from repo root
+# Isomap comparison in toy_hierarchy: pip install scikit-learn
 ```
-
-## Paper-scale runs
-
-Omit `--quick` (slower; especially USPS depth 1–5):
-
-```bash
-python toy_warped_regression.py --repeats 10 --outdir /tmp/dgp2013
-python usps_digits.py --depths 1 2 3 4 5 --outdir /tmp/dgp2013
-```
-
-## High-five / MRD
-
-The high-five experiment uses **conditionally independent observation views**
-with a shared parent latent layer (`ObservedMRDLayer`, CIP-0002).
-`highfive_shared.py` fits that model; use `--synthetic` when MOCAP data are
-unavailable. See also ``examples/example_mrd.py``.
 
 ## Citation
 
