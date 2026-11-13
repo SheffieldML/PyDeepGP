@@ -17,7 +17,7 @@ def numpy_to_MPI_typemap(np_type):
     typemap = {
         np.dtype(np.float64) : MPI.DOUBLE,
         np.dtype(np.float32) : MPI.FLOAT,
-        np.dtype(np.int)     : MPI.INT,
+        np.dtype(np.int64)    : MPI.INT,
         np.dtype(np.int8)    : MPI.CHAR,
         np.dtype(np.uint8)   : MPI.UNSIGNED_CHAR,
         np.dtype(np.int32)   : MPI.INT,

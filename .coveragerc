@@ -8,8 +8,6 @@ branch = True
 source = deepgp
 omit =
     */deepgp/testing/*
-    */deepgp/encoder/*
-    */deepgp/layers/enclayer.py
     */deepgp/layers/mrd.py
     */deepgp/inference/vardtc_parallel.py
     */deepgp/inference/inferenceX.py
