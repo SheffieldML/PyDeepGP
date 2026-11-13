@@ -46,6 +46,24 @@ encoder and MRD (see `.coveragerc`). MPI parallel inference and prediction-only
 SVI helpers remain omitted until those paths are removed or revived
 (CIP-0001 Phases 2–4).
 
+Pre-commit (notebooks)
+----------------------
+
+Commits strip Jupyter outputs and execution counts via
+[nbstripout](https://github.com/kynan/nbstripout) so notebook diffs stay
+readable. Install once after cloning::
+
+```bash
+python -m pip install pre-commit
+pre-commit install
+```
+
+Hooks run automatically on ``git commit``. To strip existing notebooks::
+
+```bash
+pre-commit run nbstripout --all-files
+```
+
 Multi-view / MRD (CIP-0002)
 ---------------------------
 
