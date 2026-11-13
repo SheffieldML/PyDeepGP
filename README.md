@@ -3,6 +3,10 @@ Deep GP
 
 The Python Implementation of Deep Gaussian Processes
 
+| Branch | Tests | Coverage |
+| --- | --- | --- |
+| `main` | [![Tests](https://github.com/SheffieldML/PyDeepGP/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/SheffieldML/PyDeepGP/actions/workflows/tests.yml?query=branch%3Amain) | [![codecov](https://codecov.io/gh/SheffieldML/PyDeepGP/branch/main/graph/badge.svg)](https://codecov.io/gh/SheffieldML/PyDeepGP/branch/main) |
+
 Currently implemented models are
 
 * Deep GPs
@@ -12,6 +16,7 @@ Testing
 -------
 
 GitHub Actions runs the unit tests (with coverage) on pull requests and pushes to `main`.
+The Ubuntu / Python 3.12 job uploads ``coverage.xml`` to [Codecov](https://codecov.io).
 
 Requires **Python >=3.11** when using GPy 1.15+.
 

@@ -48,6 +48,17 @@ jobs:
         if: always()
         run: python -m coverage xml -o coverage.xml
 
+      # Single-matrix upload (informational). Matrix jobs still gate with --fail-under=60.
+      - name: Upload coverage to Codecov
+        if: always() && matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: ubuntu-3.12
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   # CIP-0001 R11: optional MPI parity while mpi4py support still exists.
   mpi:
     runs-on: ubuntu-latest

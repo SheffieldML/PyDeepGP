@@ -1,0 +1,28 @@
+codecov:
+  branch: main
+
+coverage:
+  precision: 2
+  round: down
+  range: "40...100"
+
+  status:
+    # CI already enforces --fail-under=60 on the maintained surface (.coveragerc).
+    # Codecov statuses are informational so PRs stay mergeable while comments still flag gaps.
+    project:
+      default:
+        target: auto
+        informational: true
+        if_no_uploads: success
+
+    patch:
+      default:
+        target: 50%
+        informational: true
+        if_no_uploads: success
+
+    changes: false
+
+comment:
+  layout: "header, diff, flags"
+  behavior: default
