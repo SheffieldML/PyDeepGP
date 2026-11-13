@@ -90,9 +90,8 @@ class EncoderLayer(Parameterized):
             self.X.mean.gradient += X_grad
             
     def _gather_gradients(self):
-        from deepgp.util.parallel import numpy_to_MPI_typemap
-        t = numpy_to_MPI_typemap(self.encoder.gradient.dtype)
-        self.mpi_comm.Reduce([self.encoder.gradient.copy(), t], [self.encoder.gradient, t], root=self.mpi_root)
-        
-        t = numpy_to_MPI_typemap(self.Y_var.gradient.dtype)
-        self.mpi_comm.Reduce([self.Y_var.gradient.copy(), t], [self.Y_var.gradient, t], root=self.mpi_root)
+        # mpi4py infers MPI datatypes from NumPy buffers (CIP-0001 R8).
+        enc_grad = self.encoder.gradient
+        self.mpi_comm.Reduce(enc_grad.copy(), enc_grad, root=self.mpi_root)
+        y_grad = self.Y_var.gradient
+        self.mpi_comm.Reduce(y_grad.copy(), y_grad, root=self.mpi_root)

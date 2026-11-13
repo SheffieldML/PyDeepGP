@@ -3,11 +3,16 @@
 
 
 import sys
+import warnings
 import numpy as np
 from scipy.linalg import LinAlgError
 from GPy import Model, likelihoods
 from GPy.core.parameterization.variational import VariationalPosterior, NormalPosterior
 from ..layers import ObservedLayer, ObservedMRDLayer, HiddenLayer, TopHiddenLayer
+
+_MPI_DEPRECATION = (
+    "MPI support is deprecated; use chunked psi-statistics (see CIP-0001)."
+)
 
 class DeepGP(Model):
     """
@@ -31,6 +36,17 @@ class DeepGP(Model):
         # Back-forward compatibility with old interface
         if encoder_dims is None and 'MLP_dims' in kwargs:
             encoder_dims = kwargs['MLP_dims']
+
+        # CIP-0001 Phase 2: deprecate MPI; refuse silently-wrong configurations.
+        if mpi_comm is not None:
+            warnings.warn(_MPI_DEPRECATION, FutureWarning, stacklevel=2)
+            if not back_constraint:
+                raise ValueError(
+                    "mpi_comm is not supported with back_constraint=False: "
+                    "per-data-point variational parameters are not synchronised "
+                    "under the root-broadcast design, so results would be wrong. "
+                    "Use back_constraint=True, or omit mpi_comm (see CIP-0001)."
+                )
         
         self.mpi_comm, self.mpi_root = mpi_comm, mpi_root
         self.obs_data = obs_data

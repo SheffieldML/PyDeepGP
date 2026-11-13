@@ -1,8 +1,8 @@
 # Coverage config for PyDeepGP
 #
 # Measured surface is the maintained serial DeepGP path. The omitted modules
-# are known gaps (MPI, MRD, prediction-only SVI ratio, Theano encoder) and are
-# tracked as follow-up work rather than counted against the CI gate.
+# are known gaps (MPI, MRD, prediction-only SVI ratio) and are tracked as
+# follow-up work rather than counted against the CI gate (CIP-0001).
 [run]
 branch = True
 source = deepgp
