@@ -162,3 +162,19 @@ class DeepGPSVITest(unittest.TestCase):
         self.assertEqual(mean.shape, (3, 3))
         self.assertTrue(np.all(np.isfinite(mean)))
         self.assertTrue(np.all(var > 0))
+
+
+class MissingPredAPITest(unittest.TestCase):
+    """PredLayer / PredDeepGP are not shipped; entry points should fail clearly."""
+
+    def test_gen_pred_model_raises(self):
+        model, _, _ = _supervised_model(seed=8)
+        with self.assertRaises(NotImplementedError) as ctx:
+            model.gen_pred_model()
+        self.assertIn('issues/31', str(ctx.exception))
+
+    def test_gen_pred_layer_raises(self):
+        model, _, _ = _supervised_model(seed=9)
+        with self.assertRaises(NotImplementedError) as ctx:
+            model.layers[0].gen_pred_layer()
+        self.assertIn('issues/31', str(ctx.exception))
