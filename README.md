@@ -21,6 +21,8 @@ To run the suite locally:
 python -m pip install -e ".[test]"
 # or, if editable extras are unreliable:
 python -m pip install "numpy>=1.7" "scipy>=0.12" "GPy>=1.15" matplotlib h5py tables "coverage>=7.0"
+# For psi_chunk_size / psi_threads (CIP-0001 Phase 3) until the next GPy release:
+# python -m pip install "git+https://github.com/SheffieldML/GPy.git@main"
 python -m pip install -e . --no-deps
 
 python -m coverage run -m unittest discover -s deepgp/testing -p 'test*.py' -v
@@ -47,3 +49,15 @@ single-machine role of MPI. ``mpi_comm`` with ``back_constraint=False`` raises
 ``ValueError`` (that configuration produced silently wrong results).
 
 An optional GitHub Actions job runs a 2-rank parity check while MPI remains.
+
+Psi chunking (optional)
+-----------------------
+
+Large-N models can bound memory and use multiple cores via GPy's chunked RBF /
+linear psi-statistics (CIP-0001 Phase 3)::
+
+    m = deepgp.DeepGP(..., psi_chunk_size=500, psi_threads=4)
+
+Defaults (``psi_chunk_size=None``, ``psi_threads=1``) preserve previous
+behaviour. Threading runs inside GPy's pure psi helpers; PyDeepGP itself stays
+serial at the kernel API.

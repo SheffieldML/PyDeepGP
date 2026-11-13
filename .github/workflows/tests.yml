@@ -33,7 +33,9 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           # Install runtime + test deps explicitly: editable metadata from
           # setup.py is not reliably applied by current pip/setuptools.
-          python -m pip install "numpy>=1.7" "scipy>=0.12" "GPy>=1.15" matplotlib h5py tables "coverage>=7.0"
+          python -m pip install "numpy>=1.7" "scipy>=0.12" matplotlib h5py tables "coverage>=7.0"
+          # CIP-0001 Phase 3 needs GPy psicomp chunk_size (merged in GPy #1299; not yet on PyPI).
+          python -m pip install "git+https://github.com/SheffieldML/GPy.git@main"
           python -m pip install -e . --no-deps
 
       - name: Run unit tests with coverage
@@ -63,7 +65,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libopenmpi-dev openmpi-bin
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "numpy>=1.7" "scipy>=0.12" "GPy>=1.15" matplotlib h5py tables mpi4py
+          python -m pip install "numpy>=1.7" "scipy>=0.12" matplotlib h5py tables mpi4py
+          python -m pip install "git+https://github.com/SheffieldML/GPy.git@main"
           python -m pip install -e . --no-deps
 
       - name: MPI parity (2 ranks vs serial)

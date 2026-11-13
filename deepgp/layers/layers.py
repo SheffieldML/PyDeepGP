@@ -21,9 +21,13 @@ class SparseGP_MPI(SparseGP):
                  normalizer=False,
                  mpi_comm=None,
                  mpi_root=0,
-                 auto_update=True):
+                 auto_update=True,
+                 psi_chunk_size=None,
+                 psi_threads=1):
         self.mpi_comm = mpi_comm
         self.mpi_root = mpi_root
+        self.psi_chunk_size = psi_chunk_size
+        self.psi_threads = 1 if psi_threads is None else int(psi_threads)
         self.psicov = False
         self.svi = False
         self.qU_ratio = 1.
@@ -32,7 +36,7 @@ class SparseGP_MPI(SparseGP):
         if inference_method is None:
             from ..inference import VarDTC_parallel, VarDTC
             if mpi_comm is None:
-                inference_method = VarDTC()
+                inference_method = VarDTC(psi_chunk_size=psi_chunk_size, psi_threads=self.psi_threads)
             else:
                 inference_method = VarDTC_parallel(mpi_comm, mpi_root)
         elif inference_method=='inferentia' and mpi_comm is None:
@@ -41,7 +45,7 @@ class SparseGP_MPI(SparseGP):
             self.psicov = True
         elif inference_method=='svi':
             from ..inference import SVI_VarDTC
-            inference_method = SVI_VarDTC()
+            inference_method = SVI_VarDTC(psi_chunk_size=psi_chunk_size, psi_threads=self.psi_threads)
             self.svi = True
         
         super(SparseGP_MPI, self).__init__(X, Y, Z, kernel,
@@ -50,6 +54,9 @@ class SparseGP_MPI(SparseGP):
                                            inference_method=inference_method,
                                            name=name, Y_metadata=Y_metadata,
                                            normalizer=normalizer)
+
+        from ..util.psi_chunking import apply_psi_chunking
+        apply_psi_chunking(self, psi_chunk_size, self.psi_threads)
         
         if self.svi:
             from ..util.misc import comp_mapping
@@ -172,7 +179,8 @@ class Layer(SparseGP_MPI):
                  Z=None, num_inducing=10,  kernel=None,
                  inference_method=None, uncertain_inputs=True,
                  mpi_comm=None, mpi_root=0, back_constraint=True,
-                 encoder=None, auto_update=True, name='layer'):
+                 encoder=None, auto_update=True, name='layer',
+                 psi_chunk_size=None, psi_threads=1):
 
         self.uncertain_inputs = uncertain_inputs
         self.layer_lower = layer_lower
@@ -205,7 +213,9 @@ class Layer(SparseGP_MPI):
         super(Layer, self).__init__(X, Y, Z, kernel,
                                     likelihood, inference_method=inference_method,
                                     mpi_comm=mpi_comm, mpi_root=mpi_root,
-                                    auto_update=auto_update, name=name)
+                                    auto_update=auto_update, name=name,
+                                    psi_chunk_size=psi_chunk_size,
+                                    psi_threads=psi_threads)
         self.link_parameter(self.Kuu_sigma)
         if back_constraint: self.encoder = encoder
 
@@ -304,7 +314,8 @@ class ObservedLayer(Layer):
                     mpi_comm=None, mpi_root=0,
                  back_constraint=True, encoder=None,
                  auto_update=True, repeatX=False,
-                 repeatXsplit=0, name='obslayer'):
+                 repeatXsplit=0, name='obslayer',
+                 psi_chunk_size=None, psi_threads=1):
         self.dim_up, self.dim_down = dim_up, dim_down
         self._Y = Y
         self.repeatX = repeatX
@@ -321,7 +332,9 @@ class ObservedLayer(Layer):
                                             mpi_comm=mpi_comm, mpi_root=mpi_root,
                                             back_constraint=back_constraint,
                                             encoder=encoder, auto_update=auto_update,
-                                            name=name)
+                                            name=name,
+                                            psi_chunk_size=psi_chunk_size,
+                                            psi_threads=psi_threads)
         
     def set_as_toplayer(self, flag=True):
         if flag:
@@ -339,7 +352,8 @@ class HiddenLayer(Layer):
                  kernel=None, inference_method=None,
                  noise_var=1e-2, init='rand',
                  mpi_comm=None, mpi_root=0, back_constraint=True,
-                 encoder=None, auto_update=True, name='hiddenlayer'):
+                 encoder=None, auto_update=True, name='hiddenlayer',
+                 psi_chunk_size=None, psi_threads=1):
         
         self.dim_up, self.dim_down = dim_up, layer_lower.X.shape[1] #self.Y.shape[1]
         likelihood = likelihoods.Gaussian(variance=noise_var)
@@ -354,7 +368,9 @@ class HiddenLayer(Layer):
                                           mpi_comm=mpi_comm, mpi_root=mpi_root,
                                           back_constraint=back_constraint,
                                           encoder=encoder, auto_update=auto_update,
-                                          name=name)
+                                          name=name,
+                                          psi_chunk_size=psi_chunk_size,
+                                          psi_threads=psi_threads)
 
     def update_layer(self):
         super(HiddenLayer,self).update_layer()
@@ -398,7 +414,8 @@ class TopHiddenLayer(Layer):
                  mpi_comm=None, mpi_root=0,
                  encoder=None,
                  back_constraint=True,
-                 auto_update=True, name='tophiddenlayer'):
+                 auto_update=True, name='tophiddenlayer',
+                 psi_chunk_size=None, psi_threads=1):
         
         self.dim_up, self.dim_down = dim_up, layer_lower.X.shape[1]
         likelihood = likelihoods.Gaussian(variance=noise_var)
@@ -411,7 +428,9 @@ class TopHiddenLayer(Layer):
                                              mpi_comm=mpi_comm, mpi_root=mpi_root,
                                              back_constraint=back_constraint,
                                              encoder=encoder, auto_update=auto_update,
-                                             name=name)
+                                             name=name,
+                                             psi_chunk_size=psi_chunk_size,
+                                             psi_threads=psi_threads)
 
     def update_layer(self):
         super(TopHiddenLayer,self).update_layer()

@@ -26,9 +26,11 @@ class SVI_VarDTC(LatentFunctionInference):
 
     """
     const_jitter = 1e-6
-    def __init__(self, mpi_comm=None, mpi_root=0):
+    def __init__(self, mpi_comm=None, mpi_root=0, psi_chunk_size=None, psi_threads=1):
         self.mpi_comm = mpi_comm
         self.mpi_root=mpi_root
+        self.psi_chunk_size = psi_chunk_size
+        self.psi_threads = 1 if psi_threads is None else int(psi_threads)
     
     def get_trYYT(self, Y):
         return np.sum(np.square(Y))
@@ -41,10 +43,34 @@ class SVI_VarDTC(LatentFunctionInference):
             return jitchol(tdot(Y))
 
     def gatherPsiStat(self, kern, X, Z, Y, beta, uncertain_inputs):
+        from ..util.psi_chunking import configure_kern_psicomp, row_slices
 
         assert beta.size == 1
 
-        if uncertain_inputs:
+        psicomp_chunked = configure_kern_psicomp(kern, self.psi_chunk_size, self.psi_threads)
+        N = X.shape[0]
+        chunk = self.psi_chunk_size
+        use_serial_chunks = (
+            uncertain_inputs
+            and chunk is not None
+            and int(chunk) > 0
+            and int(chunk) < N
+            and not psicomp_chunked
+        )
+
+        if use_serial_chunks:
+            psi1_parts = []
+            psi2 = None
+            psi0 = 0.0
+            for sl in row_slices(N, chunk):
+                Xc = X[sl]
+                psi0 = psi0 + kern.psi0(Z, Xc).sum()
+                psi1_parts.append(kern.psi1(Z, Xc) * beta)
+                psi2_c = kern.psi2(Z, Xc) * beta
+                psi2 = psi2_c if psi2 is None else psi2 + psi2_c
+            psi1 = np.vstack(psi1_parts)
+            psi0 = psi0 * beta
+        elif uncertain_inputs:
             psi0 = kern.psi0(Z, X).sum()*beta
             psi1 = kern.psi1(Z, X)*beta
             psi2 = kern.psi2(Z, X)*beta
