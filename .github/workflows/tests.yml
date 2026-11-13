@@ -45,3 +45,29 @@ jobs:
       - name: Upload coverage XML
         if: always()
         run: python -m coverage xml -o coverage.xml
+
+  # CIP-0001 R11: optional MPI parity while mpi4py support still exists.
+  mpi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install MPI and Python deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libopenmpi-dev openmpi-bin
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install "numpy>=1.7" "scipy>=0.12" "GPy>=1.15" matplotlib h5py tables mpi4py
+          python -m pip install -e . --no-deps
+
+      - name: MPI parity (2 ranks vs serial)
+        env:
+          OMPI_MCA_btl_vader_single_copy_mechanism: none
+          OMPI_MCA_rmaps_base_oversubscribe: 'true'
+        run: mpiexec -n 2 python -m deepgp.testing.mpi_parity

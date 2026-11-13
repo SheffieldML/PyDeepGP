@@ -35,4 +35,15 @@ tox
 
 Coverage is gated on the maintained serial DeepGP path, including the NumPy
 encoder (see `.coveragerc`). MPI parallel inference, MRD, and prediction-only
-SVI helpers remain omitted until those paths are revived (CIP-0001 Phases 2–4).
+SVI helpers remain omitted until those paths are revived or removed
+(CIP-0001 Phases 2–4).
+
+MPI (deprecated)
+----------------
+
+Passing ``mpi_comm`` to ``DeepGP`` emits a ``FutureWarning`` (CIP-0001). Use
+serial models for now; chunked psi-statistics (Phase 3) will replace the
+single-machine role of MPI. ``mpi_comm`` with ``back_constraint=False`` raises
+``ValueError`` (that configuration produced silently wrong results).
+
+An optional GitHub Actions job runs a 2-rank parity check while MPI remains.
