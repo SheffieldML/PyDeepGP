@@ -11,6 +11,7 @@ Currently implemented models are
 
 * Deep GPs
 * Variational Auto-encoded Deep GPs (NumPy MLP back-constraint; see CIP-0001)
+* Multi-view / MRD Deep GPs (shared latent layer over observation views; see CIP-0002)
 
 Testing
 -------
@@ -41,9 +42,28 @@ tox
 ```
 
 Coverage is gated on the maintained serial DeepGP path, including the NumPy
-encoder (see `.coveragerc`). MPI parallel inference, MRD, and prediction-only
-SVI helpers remain omitted until those paths are revived or removed
+encoder and MRD (see `.coveragerc`). MPI parallel inference and prediction-only
+SVI helpers remain omitted until those paths are removed or revived
 (CIP-0001 Phases 2–4).
+
+Multi-view / MRD (CIP-0002)
+---------------------------
+
+Pass a list of observation matrices and a matching list of output dimensions.
+The observation-layer kernels must be a **list of kernels** (one per view)::
+
+    m = deepgp.DeepGP(
+        [[D1, D2], Q_shared, Q_top],
+        Y=[Y1, Y2],
+        kernels=[[kern_v1, kern_v2], kern_top],
+        num_inducing=40,
+        back_constraint=False,
+    )
+
+With ``back_constraint=True``, ``encoder_dims[0]`` is a list of per-view MLP
+hidden widths (e.g. ``[[[4], [4]], [3]]``); higher indices feed the usual
+``EncoderLayer`` stack for layers above the MRD leaf. See
+``examples/example_mrd.py``.
 
 MPI (deprecated)
 ----------------
