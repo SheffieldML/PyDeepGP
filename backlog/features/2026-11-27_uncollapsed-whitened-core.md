@@ -31,8 +31,8 @@ Phase 4 of CIP-0003. GPy's SVGP cannot serve as a hidden layer (CIP-0003, Resolv
 - [x] Backward pass passes finite-difference checks for every output
 - [x] Gradients flow through a two-layer stack with frozen `eps`
 - [x] Doubly stochastic bound, with a likelihood at the top, passes finite-difference gradient checks (the `checkgrad`-style test on the `DeepGP` shell comes with the shell)
-- [ ] `DeepGP`-level shell with inference selectable by name; default unchanged
-- [ ] Minibatching with a seeded generator
+- [x] `DeepGP`-level shell with inference selectable by name; default unchanged
+- [x] Minibatching with a seeded generator
 - [ ] Reproduce GPc CIP-0035 reference numbers on a shared small problem (Phase 5 overlap)
 
 ## Related
@@ -61,3 +61,14 @@ Next slice: the doubly stochastic bound over a stack (likelihood at the top, KL 
 - Finite-difference checks pass for `q(u)`, kernels, `Z`, inputs and the noise variance on a three-layer stack, with and without residual means, two samples.
 
 Remaining: `DeepGP`-shaped shell with inference selectable by name, seeded minibatching, natural gradients, GPc cross-check. Non-Gaussian likelihoods at the top are not covered yet.
+
+### 2026-11-27 (slice 3)
+
+`deepgp/models/uncollapsed.py` (`DoublyStochasticDeepGP`, `WhitenedLayer`), tests in `deepgp/testing/test_doubly_stochastic_model.py` (104 passed overall):
+- GPy `Model` holding kernels, `Z`, whitened `q(u)` (packed Cholesky as in GPy's SVGP) and the noise as parameters; `checkgrad` passes for stacks with and without residual means, with samples and on a minibatch.
+- Randomness is explicit: frozen `eps` make the objective deterministic, so `optimize` and `checkgrad` work; `resample(seed)` and `set_batch` redraw. `fit_minibatch` runs Adam in GPy's unconstrained space with a seeded generator (identical trajectories for equal seeds; tested). `predict` is a Monte Carlo mixture over hidden layers.
+- `DeepGP(..., inference_method='doubly_stochastic')` returns this model via `__new__`; the default path is unchanged (tested). It is a different model class, not a `DeepGP` instance.
+- At initialisation `q(u)` equals the prior, so the top layer ignores its input and the bound does not depend on `eps` until `q(u)` moves; a test documents this.
+
+Limitations: supervised only (no `q(X)`), Gaussian likelihood only, no natural gradients, Adam is hand-rolled and untuned, no comparison on a real dataset yet.
+Remaining: natural gradients, unsupervised (latent `X`), GPc CIP-0035 cross-check.

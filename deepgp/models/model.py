@@ -22,6 +22,17 @@ class DeepGP(Model):
           m = deepgp.DeepGP(..., repeatX=True)
     """
     
+    def __new__(cls, *args, **kwargs):
+        # inference_method='doubly_stochastic' selects the uncollapsed family (CIP-0003
+        # Phase 4). It is a different parameterisation (whitened q(u) per layer), so it
+        # returns that model rather than a DeepGP; the default is unchanged.
+        if kwargs.get('inference_method') == 'doubly_stochastic':
+            from .uncollapsed import DoublyStochasticDeepGP
+            kwargs = dict(kwargs)
+            del kwargs['inference_method']
+            return DoublyStochasticDeepGP(*args, **kwargs)
+        return super(DeepGP, cls).__new__(cls)
+
     def __init__(self, nDims, Y, X=None, num_inducing=10,
                  likelihood = None, inits='PCA', name='deepgp',
                  kernels=None, obs_data='cont', back_constraint=True,
