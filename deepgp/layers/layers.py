@@ -11,6 +11,7 @@ from GPy import kern
 from GPy.core.parameterization.variational import NormalPosterior, VariationalPosterior
 from deepgp.util.variational import NormalEntropy,NormalPrior
 from deepgp.util.util import reject_mpi_comm
+from ..functional import route_gradients
 from GPy.inference.latent_function_inference.posterior import Posterior
 
 class SparseGPLayer(SparseGP):
@@ -35,7 +36,6 @@ class SparseGPLayer(SparseGP):
         reject_mpi_comm(mpi_comm)
         self.psi_chunk_size = psi_chunk_size
         self.psi_threads = 1 if psi_threads is None else int(psi_threads)
-        self.psicov = False
         self.svi = False
         self.qU_ratio = 1.
         self.auto_update = auto_update
@@ -97,53 +97,15 @@ class SparseGPLayer(SparseGP):
         if hasattr(self, 'Kuu_sigma') and self.Kuu_sigma is not None:
             self.Kuu_sigma.gradient = np.diag(dL_dKmm)
 
-        if isinstance(self.X, VariationalPosterior):
-            #gradients wrt kernel
-            
-            if self.psicov:
-                self.kern.update_gradients_expectations_psicov(variational_posterior=self.X,
-                                                        Z=self.Z,
-                                                        dL_dpsi0=self.grad_dict['dL_dpsi0'],
-                                                        dL_dpsi1=self.grad_dict['dL_dpsi1'],
-                                                        dL_dpsicov=self.grad_dict['dL_dpsicov'])
-            else:
-                self.kern.update_gradients_expectations(variational_posterior=self.X,
-                                                        Z=self.Z,
-                                                        dL_dpsi0=self.grad_dict['dL_dpsi0'],
-                                                        dL_dpsi1=self.grad_dict['dL_dpsi1'],
-                                                        dL_dpsi2=self.grad_dict['dL_dpsi2'])
-            kerngrad = self.kern.gradient.copy()
-            self.kern.update_gradients_full(dL_dKmm, self.Z, None)
-            kerngrad += self.kern.gradient.copy()
-            self.kern.gradient = kerngrad
-
-            #gradients wrt Z
-            if self.psicov:
-                self.Z.gradient = self.kern.gradients_Z_expectations_psicov(
-                                   self.grad_dict['dL_dpsi0'],
-                                   self.grad_dict['dL_dpsi1'],
-                                   self.grad_dict['dL_dpsicov'],
-                                   Z=self.Z,
-                                   variational_posterior=self.X)
-            else:
-                self.Z.gradient = self.kern.gradients_Z_expectations(
-                                   self.grad_dict['dL_dpsi0'],
-                                   self.grad_dict['dL_dpsi1'],
-                                   self.grad_dict['dL_dpsi2'],
-                                   Z=self.Z,
-                                   variational_posterior=self.X)
-            self.Z.gradient += self.kern.gradients_X(dL_dKmm, self.Z)
-        else:
-            #gradients wrt kernel
-            self.kern.update_gradients_diag(self.grad_dict['dL_dKdiag'], self.X)
-            kerngrad = self.kern.gradient.copy()
-            self.kern.update_gradients_full(self.grad_dict['dL_dKnm'], self.X, self.Z)
-            kerngrad += self.kern.gradient
-            self.kern.update_gradients_full(dL_dKmm, self.Z, None)
-            self.kern.gradient += kerngrad
-            #gradients wrt Z
-            self.Z.gradient = self.kern.gradients_X(self.grad_dict['dL_dKnm'].T, self.Z, self.X)
-            self.Z.gradient += self.kern.gradients_X(dL_dKmm, self.Z)
+        kerngrad, Zgrad = route_gradients(
+            self.kern, self.Z, self.X, dL_dKmm,
+            dL_dpsi0=self.grad_dict.get('dL_dpsi0'),
+            dL_dpsi1=self.grad_dict.get('dL_dpsi1'),
+            dL_dpsi2=self.grad_dict.get('dL_dpsi2'),
+            dL_dKdiag=self.grad_dict.get('dL_dKdiag'),
+            dL_dKnm=self.grad_dict.get('dL_dKnm'))
+        self.kern.gradient = kerngrad
+        self.Z.gradient = Zgrad
 
         if self.svi:
             self.qU_mean.gradient = self.grad_dict['dL_dqU_mean']
@@ -225,20 +187,12 @@ class Layer(SparseGPLayer):
         return self.Y if self.layer_lower is None else self.layer_lower.X.mean   
         
     def update_qX_gradients(self):
-        if self.psicov:
-            self.X.mean.gradient, self.X.variance.gradient = self.kern.gradients_qX_expectations_psicov(
-                                                variational_posterior=self.X,
-                                                Z=self.Z,
-                                                dL_dpsi0=self.grad_dict['dL_dpsi0'],
-                                                dL_dpsi1=self.grad_dict['dL_dpsi1'],
-                                                dL_dpsicov=self.grad_dict['dL_dpsicov'])
-        else:
-            self.X.mean.gradient, self.X.variance.gradient = self.kern.gradients_qX_expectations(
-                                                variational_posterior=self.X,
-                                                Z=self.Z,
-                                                dL_dpsi0=self.grad_dict['dL_dpsi0'],
-                                                dL_dpsi1=self.grad_dict['dL_dpsi1'],
-                                                dL_dpsi2=self.grad_dict['dL_dpsi2'])
+        self.X.mean.gradient, self.X.variance.gradient = self.kern.gradients_qX_expectations(
+                                            variational_posterior=self.X,
+                                            Z=self.Z,
+                                            dL_dpsi0=self.grad_dict['dL_dpsi0'],
+                                            dL_dpsi1=self.grad_dict['dL_dpsi1'],
+                                            dL_dpsi2=self.grad_dict['dL_dpsi2'])
         delta = -self.variationalterm.comp_value(self.X)
         self._log_marginal_likelihood += delta
         self.variationalterm.update_gradients(self.X)
