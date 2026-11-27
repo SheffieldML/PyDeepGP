@@ -11,7 +11,7 @@ from GPy import kern
 from GPy.core.parameterization.variational import NormalPosterior, VariationalPosterior
 from deepgp.util.variational import NormalEntropy,NormalPrior
 from deepgp.util.util import reject_mpi_comm
-from ..functional import route_gradients
+from ..functional import route_gradients, qx_gradients
 from GPy.inference.latent_function_inference.posterior import Posterior
 
 class SparseGPLayer(SparseGP):
@@ -187,12 +187,9 @@ class Layer(SparseGPLayer):
         return self.Y if self.layer_lower is None else self.layer_lower.X.mean   
         
     def update_qX_gradients(self):
-        self.X.mean.gradient, self.X.variance.gradient = self.kern.gradients_qX_expectations(
-                                            variational_posterior=self.X,
-                                            Z=self.Z,
-                                            dL_dpsi0=self.grad_dict['dL_dpsi0'],
-                                            dL_dpsi1=self.grad_dict['dL_dpsi1'],
-                                            dL_dpsi2=self.grad_dict['dL_dpsi2'])
+        self.X.mean.gradient, self.X.variance.gradient = qx_gradients(
+            self.kern, self.Z, self.X, self.grad_dict['dL_dpsi0'],
+            self.grad_dict['dL_dpsi1'], self.grad_dict['dL_dpsi2'])
         delta = -self.variationalterm.comp_value(self.X)
         self._log_marginal_likelihood += delta
         self.variationalterm.update_gradients(self.X)

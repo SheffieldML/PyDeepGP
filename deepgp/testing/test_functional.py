@@ -106,3 +106,67 @@ class LayerCheckgradTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class QXFunctionsTest(unittest.TestCase):
+    def test_aggregate_is_precision_weighted(self):
+        rng = np.random.RandomState(8)
+        ms = [rng.randn(5, 2) for _ in range(3)]
+        vs = [rng.rand(5, 2) + .1 for _ in range(3)]
+        from deepgp.functional import aggregate_qx
+        mean, var, prec = aggregate_qx(ms, vs)
+        np.testing.assert_allclose(prec, sum(1. / v for v in vs))
+        np.testing.assert_allclose(var, 1. / prec)
+        np.testing.assert_allclose(mean, sum(m / v for m, v in zip(ms, vs)) / prec)
+
+    def test_disaggregate_matches_finite_differences(self):
+        from deepgp.functional import aggregate_qx, disaggregate_qx_gradients
+        rng = np.random.RandomState(9)
+        ms = [rng.randn(4, 2) for _ in range(2)]
+        vs = [rng.rand(4, 2) + .2 for _ in range(2)]
+        wm, wv = rng.randn(4, 2), rng.randn(4, 2)
+
+        def f(ms_, vs_):  # scalar function of the aggregate
+            m, v, _ = aggregate_qx(ms_, vs_)
+            return float((wm * m).sum() + (wv * v).sum())
+
+        mean, var, prec = aggregate_qx(ms, vs)
+        grads = disaggregate_qx_gradients(ms, vs, prec, mean, wm, wv)
+        for i in range(2):
+            gm = _fd(lambda x: f([x if j == i else ms[j] for j in range(2)], vs), ms[i])
+            gv = _fd(lambda x: f(ms, [x if j == i else vs[j] for j in range(2)]), vs[i])
+            np.testing.assert_allclose(grads[i][0], gm, atol=1e-5)
+            np.testing.assert_allclose(grads[i][1], gv, atol=1e-5)
+
+
+class MRDCheckgradTest(unittest.TestCase):
+    def _views(self):
+        rng = np.random.RandomState(10)
+        X = rng.randn(10, 2)
+        return X @ rng.randn(2, 3) + .05 * rng.randn(10, 3), X @ rng.randn(2, 3) + .05 * rng.randn(10, 3)
+
+    def _kernels(self, q):
+        return [GPy.kern.RBF(q, ARD=True), GPy.kern.RBF(q, ARD=True)]
+
+    def test_mrd_checkgrad(self):
+        Y1, Y2 = self._views()
+        m = deepgp.DeepGP([[3, 3], 2], [Y1, Y2], kernels=[self._kernels(2)],
+                          num_inducing=4, back_constraint=False)
+        self.assertTrue(m.checkgrad())
+
+    def test_mrd_with_hidden_layer_checkgrad(self):
+        Y1, Y2 = self._views()
+        m = deepgp.DeepGP([[3, 3], 2, 2], [Y1, Y2],
+                          kernels=[self._kernels(2), GPy.kern.RBF(2, ARD=True)],
+                          num_inducing=4, back_constraint=False)
+        self.assertTrue(m.checkgrad())
+
+    # Known defect (backlog/bugs/2026-11-27_mrd-back-constraint-gradients.md): the
+    # encoder (MLP) gradients are a constant factor 5 from numerical, and the
+    # shared X_var gradient is lost. Present before the CIP-0003 extraction.
+    @unittest.expectedFailure
+    def test_mrd_back_constrained_checkgrad(self):
+        Y1, Y2 = self._views()
+        m = deepgp.DeepGP([[3, 3], 2], [Y1, Y2], kernels=[self._kernels(2)],
+                          num_inducing=4, back_constraint=True)
+        self.assertTrue(m.checkgrad())

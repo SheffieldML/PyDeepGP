@@ -18,7 +18,8 @@ package a layer is split into
 The collapsed (VarDTC) family is implemented by :func:`collapsed_bound`
 (statistics -> bound, posterior and gradients w.r.t. the statistics) and
 :func:`route_gradients` (gradients w.r.t. statistics -> gradients w.r.t. kernel
-parameters, inducing inputs and q(X)). The second function receives the GPy
+parameters and inducing inputs), :func:`qx_gradients` (-> q(X)), and, for MRD,
+:func:`aggregate_qx` / :func:`disaggregate_qx_gradients`. The second function receives the GPy
 kernel *object* as its single non-array argument, since GPy kernels are not yet
 pure functions (GPy CIP-000F Stage 2). It never touches ``Param`` objects,
 observers or communicators and returns plain arrays; the shell assigns them.
@@ -30,5 +31,7 @@ gradients to parameters.
 
 from .collapsed import collapsed_bound
 from .gradients import route_gradients
+from .qx import qx_gradients, aggregate_qx, disaggregate_qx_gradients
 
-__all__ = ["collapsed_bound", "route_gradients"]
+__all__ = ["collapsed_bound", "route_gradients", "qx_gradients",
+           "aggregate_qx", "disaggregate_qx_gradients"]
