@@ -33,7 +33,7 @@ Phase 4 of CIP-0003. GPy's SVGP cannot serve as a hidden layer (CIP-0003, Resolv
 - [x] Doubly stochastic bound, with a likelihood at the top, passes finite-difference gradient checks (the `checkgrad`-style test on the `DeepGP` shell comes with the shell)
 - [x] `DeepGP`-level shell with inference selectable by name; default unchanged
 - [x] Minibatching with a seeded generator
-- [ ] Reproduce GPc CIP-0035 reference numbers on a shared small problem (Phase 5 overlap)
+- [x] Reproduce GPc CIP-0035 reference numbers on a shared small problem (Phase 5 overlap)
 
 ## Related
 
@@ -72,3 +72,10 @@ Remaining: `DeepGP`-shaped shell with inference selectable by name, seeded minib
 
 Limitations: supervised only (no `q(X)`), Gaussian likelihood only, no natural gradients, Adam is hand-rolled and untuned, no comparison on a real dataset yet.
 Remaining: natural gradients, unsupervised (latent `X`), GPc CIP-0035 cross-check.
+
+### 2026-11-27 (slice 4: GPc cross-check)
+
+`deepgp/testing/gpc_reference_generate.py` builds GPc `DeepGP` models (1, 2, 3 layers; N=20, M=4, hidden width 2), overwrites the packed stochastic parameter vector with random values (layout read from `CSvgp::getStochasticParams`: log kernel parameters, `Z`, log beta, then per output the means and the lower Cholesky with log diagonal), reloads, and records GPc's ELBO and `layer_kl`. The golden file `gpc_reference.json` is committed; `test_gpc_reference.py` evaluates the same parameters in PyDeepGP, so CI does not need GPc.
+- One layer: ELBO agrees to 1e-4, KL to 1e-6, predictive mean and variance to 1e-5 (GPc RBF is `variance * exp(-0.5 * inverseWidth * r^2)`, so `lengthscale = inverseWidth^-0.5`; GPc beta is a precision).
+- Two and three layers (Monte Carlo, GPc's `elbo()` averaged over 4000 calls): agreement within four combined standard errors; per-layer KL agree.
+Not done: the V8 composite-task reproduction (RMSE <= 0.26, NLL <= 0) needs training and the GPc task generator; it remains open for Phase 5.
