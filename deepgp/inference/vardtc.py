@@ -45,6 +45,9 @@ class VarDTC(GPyVarDTC):
             if sparse_linalg != "stable":
                 raise
             super(VarDTC, self).__init__(limit=1)
+        # Newer GPy sets ``const_jitter`` per instance in ``__init__``, which would shadow the
+        # class attribute above; reassert our convention.
+        self.const_jitter = type(self).const_jitter
         self.psi_chunk_size = psi_chunk_size
         self.psi_threads = 1 if psi_threads is None else int(psi_threads)
 
