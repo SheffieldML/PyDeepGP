@@ -89,3 +89,29 @@ Hidden layers stay on Adam. Not compared with GPc's trained trajectories.
 
 `doubly_stochastic_bound(..., x_var, eps_x)` treats `X` as the mean of `q(X) = N(X, diag(x_var))`: each sample draws `X + sqrt(x_var) eps_x`, and `scale * KL(q(X) || N(0, I))` is subtracted (scaled by N/B with the data term, so minibatches stay unbiased). `DoublyStochasticDeepGP(nDims, Y, None, ...)` holds `X_mean` and `X_var` (log-exp constrained) as parameters, initialised by standardised PCA of `Y`, with frozen `eps_x` alongside `eps`. Tests: finite-difference gradients for `X` and `x_var` through a residual two-layer stack, tiny-variance limit equals the deterministic bound minus the latent KL, `checkgrad` on the full model and on a minibatch, and a short training run that improves the bound and predicts.
 Limitations: Gaussian likelihood only; no back-constraint (amortised `q(X)`) and no MRD views for this model; natural gradients still only for the top layer; no real dataset (oil, CMU walk) comparison against the collapsed model yet.
+
+### 2026-11-27 (slice 7: V8 and oil / CMU comparisons)
+
+Scripts (not run in CI): `examples/composite_v8.py`, `examples/compare_collapsed_vs_doubly_stochastic.py`. `DoublyStochasticDeepGP` now defaults `X=None`, so `DeepGP(nDims, Y, inference_method='doubly_stochastic')` selects the unsupervised model.
+
+**V8** (GPc composite task, RBF, M=64, hidden width 5, residual means, 3000 Adam steps, batch 256, lr 0.01, one seed, predictive NLL from the moment-matched Gaussian of 50 samples):
+
+| L | test RMSE | test NLL | ELBO/N |
+|---|-----------|----------|--------|
+| 1 | 0.772 | 1.151 | -1.228 |
+| 2 | 0.204 | -0.193 | -0.156 |
+| 3 | 0.207 | -0.188 | -0.229 |
+
+The gate (L=3: RMSE <= 0.26, NLL <= 0, beats one layer) is met. GPc's RBF numbers (3 seeds, same settings) are L=3 0.193 / -0.344 and L=2 0.249 / -0.171, so ours is within the RMSE range but the NLL is less sharp at L=3, and our L=2 is better than L=3 on this seed. One seed only; the ELBO at L=3 had not converged (it is below L=2). Initialisation (hidden-layer kernel variance, noise) is untuned and differs from GPc's `chi = 1/L` scheme.
+
+**Oil** (100 points, 12-D standardised, `[12, 5, 2]`, M=30; collapsed VarDTC 5000 iterations, doubly stochastic 3000 full-batch Adam steps): 1-NN leave-one-out class error in the 2-D latent / reconstruction RMSE:
+
+| model | seed 0 | seed 1 |
+|-------|--------|--------|
+| collapsed | 0.03 / 0.65 (500 iters) | 0.35 / 0.80 |
+| doubly stochastic | 0.03 / 0.197 | 0.03 / 0.184 |
+| + natgrad 0.1 | 0.03 / 0.178 | 0.03 / 0.172 |
+
+**CMU** subject 35 walk 01 (358 frames, 62-D; train on even frames, predict odd frames from interpolated top latents, `[62, 5, 3]`, M=25; held-out RMSE on standardised data, predicting the mean gives 0.95): collapsed 0.438, doubly stochastic 0.281, with natgrad 0.265.
+
+Caveats: single seeds; the collapsed model used the repository's example initialisation and is probably under-tuned (seed 1 landed in a poor optimum), so these runs do not show that doubly stochastic inference is better in general, only that it trains reliably here. Wall time is much longer for the doubly stochastic runs (100-870 s versus 8-225 s) because it is pure NumPy with per-sample Python loops. The CMU metric tests latent smoothness, not dynamics.

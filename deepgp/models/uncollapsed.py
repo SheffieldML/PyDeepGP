@@ -64,7 +64,7 @@ class DoublyStochasticDeepGP(Model):
     :param seed: seed of the model's random generator.
     """
 
-    def __init__(self, nDims, Y, X, num_inducing=20, kernels=None, noise_var=0.1,
+    def __init__(self, nDims, Y, X=None, num_inducing=20, kernels=None, noise_var=0.1,
                  n_samples=1, residual=True, batch_size=None, seed=0, jitter=1e-6,
                  q_sqrt_hidden=1e-2, q_sqrt_x=0.5, name='doubly_stochastic_deepgp'):
         super(DoublyStochasticDeepGP, self).__init__(name=name)

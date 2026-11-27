@@ -129,3 +129,12 @@ class UnsupervisedTest(unittest.TestCase):
         mean, var = m.predict(m.X_mean.values[:5])
         self.assertEqual(mean.shape, (5, 3))
         self.assertTrue(np.all(var > 0))
+
+
+class SelectionUnsupervisedTest(unittest.TestCase):
+    def test_deepgp_without_x_selects_unsupervised_model(self):
+        import deepgp
+        Y = np.random.RandomState(0).randn(20, 4)
+        m = deepgp.DeepGP([4, 2], Y, num_inducing=5, inference_method='doubly_stochastic')
+        self.assertIsInstance(m, DoublyStochasticDeepGP)
+        self.assertTrue(m.unsupervised)
