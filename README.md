@@ -42,9 +42,8 @@ tox
 ```
 
 Coverage is gated on the maintained serial DeepGP path, including the NumPy
-encoder and MRD (see `.coveragerc`). MPI parallel inference and prediction-only
-SVI helpers remain omitted until those paths are removed or revived
-(CIP-0001 Phases 2–4).
+encoder and MRD (see `.coveragerc`). Prediction-only SVI helpers remain
+omitted until those paths are removed or revived (CIP-0001 Phases 2–4).
 
 Pre-commit (notebooks)
 ----------------------
@@ -83,15 +82,15 @@ hidden widths (e.g. ``[[[4], [4]], [3]]``); higher indices feed the usual
 ``EncoderLayer`` stack for layers above the MRD leaf. See
 ``examples/example_mrd.py``.
 
-MPI (deprecated)
-----------------
+MPI (removed)
+-------------
 
-Passing ``mpi_comm`` to ``DeepGP`` emits a ``FutureWarning`` (CIP-0001). Use
-serial models for now; chunked psi-statistics (Phase 3) will replace the
-single-machine role of MPI. ``mpi_comm`` with ``back_constraint=False`` raises
-``ValueError`` (that configuration produced silently wrong results).
-
-An optional GitHub Actions job runs a 2-rank parity check while MPI remains.
+MPI parallel inference has been removed (CIP-0001, CIP-0003). Passing a
+non-``None`` ``mpi_comm`` to ``DeepGP``, a layer or an inference method raises
+``TypeError``; ``mpi_comm=None`` is still accepted. Use chunked psi-statistics
+(``psi_chunk_size``, ``psi_threads``) for single-machine scaling. The old
+``SparseGP_MPI`` class name is now an alias of ``SparseGPLayer`` and emits a
+``FutureWarning``.
 
 Psi chunking (optional)
 -----------------------

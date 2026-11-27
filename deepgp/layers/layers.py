@@ -10,11 +10,18 @@ from GPy import likelihoods
 from GPy import kern
 from GPy.core.parameterization.variational import NormalPosterior, VariationalPosterior
 from deepgp.util.variational import NormalEntropy,NormalPrior
-from deepgp.util.parallel import reduceArrays
+from deepgp.util.util import reject_mpi_comm
 from GPy.inference.latent_function_inference.posterior import Posterior
 
-class SparseGP_MPI(SparseGP):
-    
+class SparseGPLayer(SparseGP):
+    """Sparse GP that serves as the base of every DeepGP layer.
+
+    ``mpi_comm`` and ``mpi_root`` are accepted for one further release so that
+    existing calls keep working; any non-``None`` communicator raises
+    ``TypeError`` (CIP-0001 R23, CIP-0003). Use ``psi_chunk_size`` and
+    ``psi_threads`` for single-machine scaling.
+    """
+
     def __init__(self, X, Y, Z, kernel, likelihood,
                  mean_function=None, inference_method=None,
                  name='sparse gp', Y_metadata=None,
@@ -24,8 +31,7 @@ class SparseGP_MPI(SparseGP):
                  auto_update=True,
                  psi_chunk_size=None,
                  psi_threads=1):
-        self.mpi_comm = mpi_comm
-        self.mpi_root = mpi_root
+        reject_mpi_comm(mpi_comm)
         self.psi_chunk_size = psi_chunk_size
         self.psi_threads = 1 if psi_threads is None else int(psi_threads)
         self.psicov = False
@@ -34,12 +40,9 @@ class SparseGP_MPI(SparseGP):
         self.auto_update = auto_update
 
         if inference_method is None:
-            from ..inference import VarDTC_parallel, VarDTC
-            if mpi_comm is None:
-                inference_method = VarDTC(psi_chunk_size=psi_chunk_size, psi_threads=self.psi_threads)
-            else:
-                inference_method = VarDTC_parallel(mpi_comm, mpi_root)
-        elif inference_method=='inferentia' and mpi_comm is None:
+            from ..inference import VarDTC
+            inference_method = VarDTC(psi_chunk_size=psi_chunk_size, psi_threads=self.psi_threads)
+        elif inference_method=='inferentia':
             from ..inference import VarDTC_Inferentia
             inference_method = VarDTC_Inferentia()
             self.psicov = True
@@ -48,12 +51,12 @@ class SparseGP_MPI(SparseGP):
             inference_method = SVI_VarDTC(psi_chunk_size=psi_chunk_size, psi_threads=self.psi_threads)
             self.svi = True
         
-        super(SparseGP_MPI, self).__init__(X, Y, Z, kernel,
-                                           likelihood,
-                                           mean_function=mean_function,
-                                           inference_method=inference_method,
-                                           name=name, Y_metadata=Y_metadata,
-                                           normalizer=normalizer)
+        super(SparseGPLayer, self).__init__(X, Y, Z, kernel,
+                                            likelihood,
+                                            mean_function=mean_function,
+                                            inference_method=inference_method,
+                                            name=name, Y_metadata=Y_metadata,
+                                            normalizer=normalizer)
 
         from ..util.psi_chunking import apply_psi_chunking
         apply_psi_chunking(self, psi_chunk_size, self.psi_threads)
@@ -79,18 +82,17 @@ class SparseGP_MPI(SparseGP):
             self.qU_var = tdot(self.qU_W)+np.eye(self.Z.shape[0])*self.qU_a
             self.posterior, self._log_marginal_likelihood, self.grad_dict = self.inference_method.inference(self.kern, self.X, self.Z, self.likelihood, self.Y, self.qU_mean , self.qU_var, Kuu_sigma=self.Kuu_sigma)
             
-            if self.mpi_comm is None or (self.mpi_comm is not None and self.mpi_comm.rank==self.mpi_root):
-                KL, dKL_dqU_mean, dKL_dqU_var, dKL_dKuu = self.inference_method.comp_KL_qU(self.qU_mean ,self.qU_var)
-                self._log_marginal_likelihood += -KL*self.qU_ratio        
-                self.grad_dict['dL_dqU_mean'] += -dKL_dqU_mean*self.qU_ratio
-                self.grad_dict['dL_dqU_var'] += -dKL_dqU_var*self.qU_ratio
-                self.grad_dict['dL_dKmm'] += -dKL_dKuu*self.qU_ratio
+            KL, dKL_dqU_mean, dKL_dqU_var, dKL_dKuu = self.inference_method.comp_KL_qU(self.qU_mean ,self.qU_var)
+            self._log_marginal_likelihood += -KL*self.qU_ratio
+            self.grad_dict['dL_dqU_mean'] += -dKL_dqU_mean*self.qU_ratio
+            self.grad_dict['dL_dqU_var'] += -dKL_dqU_var*self.qU_ratio
+            self.grad_dict['dL_dKmm'] += -dKL_dKuu*self.qU_ratio
         else:
             self.posterior, self._log_marginal_likelihood, self.grad_dict = self.inference_method.inference(self.kern, self.X, self.Z, self.likelihood, self.Y, self.Y_metadata, Kuu_sigma=self.Kuu_sigma if hasattr(self, 'Kuu_sigma') else None)
 
         self.likelihood.update_gradients(self.grad_dict['dL_dthetaL'])
         dL_dKmm = self.grad_dict['dL_dKmm']
-        if (self.mpi_comm is None or (self.mpi_comm is not None and self.mpi_comm.rank==self.mpi_root)) and (hasattr(self, 'Kuu_sigma') and self.Kuu_sigma is not None):
+        if hasattr(self, 'Kuu_sigma') and self.Kuu_sigma is not None:
             self.Kuu_sigma.gradient = np.diag(dL_dKmm)
 
         if isinstance(self.X, VariationalPosterior):
@@ -109,16 +111,9 @@ class SparseGP_MPI(SparseGP):
                                                         dL_dpsi1=self.grad_dict['dL_dpsi1'],
                                                         dL_dpsi2=self.grad_dict['dL_dpsi2'])
             kerngrad = self.kern.gradient.copy()
-            if self.mpi_comm is None:
-                self.kern.update_gradients_full(dL_dKmm, self.Z, None)
-                kerngrad += self.kern.gradient.copy()
-                self.kern.gradient = kerngrad
-            else:
-                kerngrad = reduceArrays([kerngrad], self.mpi_comm, self.mpi_root)[0]
-                if self.mpi_comm.rank==self.mpi_root:
-                    self.kern.update_gradients_full(dL_dKmm, self.Z, None)
-                    kerngrad += self.kern.gradient.copy()
-                    self.kern.gradient = kerngrad
+            self.kern.update_gradients_full(dL_dKmm, self.Z, None)
+            kerngrad += self.kern.gradient.copy()
+            self.kern.gradient = kerngrad
 
             #gradients wrt Z
             if self.psicov:
@@ -135,42 +130,25 @@ class SparseGP_MPI(SparseGP):
                                    self.grad_dict['dL_dpsi2'],
                                    Z=self.Z,
                                    variational_posterior=self.X)
-            if self.mpi_comm is None:
-                self.Z.gradient += self.kern.gradients_X(dL_dKmm, self.Z)
-            else:
-                self.Z.gradient =  reduceArrays([self.Z.gradient], self.mpi_comm, self.mpi_root)[0]
-                if self.mpi_comm.rank == self.mpi_root:
-                    self.Z.gradient += self.kern.gradients_X(dL_dKmm, self.Z)
+            self.Z.gradient += self.kern.gradients_X(dL_dKmm, self.Z)
         else:
             #gradients wrt kernel
             self.kern.update_gradients_diag(self.grad_dict['dL_dKdiag'], self.X)
             kerngrad = self.kern.gradient.copy()
             self.kern.update_gradients_full(self.grad_dict['dL_dKnm'], self.X, self.Z)
             kerngrad += self.kern.gradient
-            if self.mpi_comm is None:
-                self.kern.update_gradients_full(dL_dKmm, self.Z, None)
-                self.kern.gradient += kerngrad
-            else:
-                kerngrad = reduceArrays([kerngrad], self.mpi_comm, self.mpi_root)[0]
-                if self.mpi_comm.rank==self.mpi_root:
-                    self.kern.update_gradients_full(dL_dKmm, self.Z, None)
-                    kerngrad += self.kern.gradient.copy()
-                    self.kern.gradient = kerngrad
+            self.kern.update_gradients_full(dL_dKmm, self.Z, None)
+            self.kern.gradient += kerngrad
             #gradients wrt Z
             self.Z.gradient = self.kern.gradients_X(self.grad_dict['dL_dKnm'].T, self.Z, self.X)
-            if self.mpi_comm is None:
-                self.Z.gradient += self.kern.gradients_X(dL_dKmm, self.Z)
-            else:
-                self.Z.gradient =  reduceArrays([self.Z.gradient], self.mpi_comm, self.mpi_root)[0]
-                if self.mpi_comm.rank == self.mpi_root:
-                    self.Z.gradient += self.kern.gradients_X(dL_dKmm, self.Z)
+            self.Z.gradient += self.kern.gradients_X(dL_dKmm, self.Z)
 
         if self.svi:
             self.qU_mean.gradient = self.grad_dict['dL_dqU_mean']
             self.qU_W.gradient = (self.grad_dict['dL_dqU_var']+self.grad_dict['dL_dqU_var'].T).dot(self.qU_W)
             self.qU_a.gradient = np.diag(self.grad_dict['dL_dqU_var']).sum()
             
-class Layer(SparseGP_MPI):
+class Layer(SparseGPLayer):
     
     def __init__(self, layer_lower,
                  dim_down, dim_up,
@@ -200,10 +178,6 @@ class Layer(SparseGP_MPI):
                     Z_more = np.random.rand(num_inducing-X.shape[0],X.shape[1])*(X.max(0)-X.min(0))+X.min(0)
                     Z = np.vstack([X.copy(),Z_more])
         assert Z.shape[1] == X.shape[1]
-        
-        if mpi_comm is not None:
-            from ..util.parallel import broadcastArrays
-            broadcastArrays([Z], mpi_comm, mpi_root)
         
         if uncertain_inputs: X = NormalPosterior(X, X_variance)
         if kernel is None: kernel = kern.RBF(dim_up, ARD = True)
@@ -264,9 +238,6 @@ class Layer(SparseGP_MPI):
                                                 dL_dpsi1=self.grad_dict['dL_dpsi1'],
                                                 dL_dpsi2=self.grad_dict['dL_dpsi2'])
         delta = -self.variationalterm.comp_value(self.X)
-        if self.mpi_comm is not None:
-            delta = reduceArrays([np.float64(delta)],self.mpi_comm, self.mpi_root)[0]
-            if self.mpi_comm.rank != self.mpi_root: delta = 0.
         self._log_marginal_likelihood += delta
         self.variationalterm.update_gradients(self.X)
             
@@ -403,7 +374,6 @@ class HiddenLayer(Layer):
                            inference_method=None, encoder=encoder,
                            noise_var=noise_var,
                            back_constraint=layer.back_constraint,
-                           mpi_comm=layer.mpi_comm, mpi_root=layer.mpi_root,
                            auto_update=layer.auto_update, name=name)
         
 class TopHiddenLayer(Layer):
@@ -436,3 +406,14 @@ class TopHiddenLayer(Layer):
         super(TopHiddenLayer,self).update_layer()
         self.Y.mean.gradient += self.grad_dict['dL_dYmean']
         self.Y.variance.gradient += self.grad_dict['dL_dYvar'][:,None]
+
+
+def __getattr__(name):
+    # Deprecated alias (CIP-0003): the MPI base class is gone.
+    if name == 'SparseGP_MPI':
+        import warnings
+        warnings.warn(
+            "SparseGP_MPI is deprecated and no longer supports MPI; "
+            "use SparseGPLayer.", FutureWarning, stacklevel=2)
+        return SparseGPLayer
+    raise AttributeError("module %r has no attribute %r" % (__name__, name))

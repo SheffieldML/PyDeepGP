@@ -1,7 +1,7 @@
 
 import numpy as np
 
-from .layers import SparseGP_MPI
+from .layers import SparseGPLayer
 from GPy.core import Parameterized
 from GPy.core import SparseGP
 from GPy import likelihoods
@@ -10,9 +10,9 @@ from GPy.core.parameterization.variational import NormalPosterior, VariationalPo
 from GPy.util.initialization import initialize_latent
 
 from deepgp.util.variational import NormalEntropy,NormalPrior
-from deepgp.util.parallel import reduceArrays
+from deepgp.util.util import reject_mpi_comm
 
-class MRDView(SparseGP_MPI):
+class MRDView(SparseGPLayer):
     
     def __init__(self, Y, dim_down, dim_up, likelihood, MLP_dims=None, X=None, X_variance=None, init='rand',  Z=None, num_inducing=10,  kernel=None, inference_method=None, uncertain_inputs=True,mpi_comm=None, mpi_root=0, back_constraint=True, name='mrd-view'):
 
@@ -120,7 +120,7 @@ class MRDLayer(Parameterized):
                 "hidden widths, or None for the default encoder width)."
             )
         super(MRDLayer, self).__init__(name=name)
-        self.mpi_comm, self.mpi_root = mpi_comm, mpi_root
+        reject_mpi_comm(mpi_comm)
 
         self.back_constraint = True if back_constraint else False
 
@@ -182,9 +182,6 @@ class MRDLayer(Parameterized):
 
     def update_qX_gradients(self):
         delta = -self.variationalterm.comp_value(self.X)
-        if self.mpi_comm is not None:
-            delta = reduceArrays([np.float64(delta)],self.mpi_comm, self.mpi_root)[0]
-            if self.mpi_comm.rank != self.mpi_root: delta = 0
         self._log_marginal_likelihood += delta
         self.variationalterm.update_gradients(self.X)
         

@@ -13,10 +13,7 @@ from GPy.inference.latent_function_inference.posterior import Posterior
 
 log_2_pi = np.log(2*np.pi)
 
-try:
-    from mpi4py import MPI
-except:
-    pass
+from ..util.util import reject_mpi_comm
 
 class VarDTC(LatentFunctionInference):
     """
@@ -31,7 +28,7 @@ class VarDTC(LatentFunctionInference):
     const_jitter = 1e-6
     def __init__(self, mpi_comm=None, psi_chunk_size=None, psi_threads=1):
 
-        self.mpi_comm = mpi_comm
+        reject_mpi_comm(mpi_comm)
         self.psi_chunk_size = psi_chunk_size
         self.psi_threads = 1 if psi_threads is None else int(psi_threads)
         self.Y_speedup = False # Replace Y with the cholesky factor of YY.T, but the computation of posterior object will be skipped.

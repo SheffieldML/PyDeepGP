@@ -23,12 +23,12 @@ Phase 2, step 1 of CIP-0003. Execute CIP-0001 R17–R24 and CIP-0002 Phase D: de
 
 ## Acceptance Criteria
 
-- [ ] No `mpi4py` import or `mpi_comm` branch remains in `deepgp/`
-- [ ] `DeepGP(..., mpi_comm=comm)` with non-`None` raises `TypeError` naming the chunked-psi alternative
-- [ ] `SparseGP_MPI` still importable, with a `FutureWarning`, pointing at `SparseGPLayer`
-- [ ] Reference-value tests (`dgp_*.h5`, `dgp_bc_*.h5`) unchanged and passing
-- [ ] MPI parity and policy tests replaced by a test of the new error
-- [ ] `.coveragerc` and README no longer mention MPI as supported
+- [x] No `mpi4py` import or `mpi_comm` branch remains in `deepgp/`
+- [x] `DeepGP(..., mpi_comm=comm)` with non-`None` raises `TypeError` naming the chunked-psi alternative
+- [x] `SparseGP_MPI` still importable, with a `FutureWarning`, pointing at `SparseGPLayer`
+- [x] Reference-value tests (`dgp_*.h5`, `dgp_bc_*.h5`) unchanged and passing
+- [x] MPI parity and policy tests replaced by a test of the new error
+- [x] `.coveragerc` and README no longer mention MPI as supported
 
 ## Implementation Notes
 
@@ -43,3 +43,5 @@ Removal follows CIP-0001's deprecation text (the `FutureWarning` has been on `ma
 ### 2026-11-27
 
 Task created and started on branch `cip0003-remove-mpi`.
+
+Implementation complete on `cip0003-remove-mpi`: 56 tests pass (53 before, plus the new removal tests); reference tests unchanged. Awaiting review before status moves to Completed.

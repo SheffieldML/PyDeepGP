@@ -9,10 +9,7 @@ from scipy.linalg import LinAlgError
 from GPy import Model, likelihoods
 from GPy.core.parameterization.variational import VariationalPosterior, NormalPosterior
 from ..layers import ObservedLayer, ObservedMRDLayer, HiddenLayer, TopHiddenLayer
-
-_MPI_DEPRECATION = (
-    "MPI support is deprecated; use chunked psi-statistics (see CIP-0001)."
-)
+from ..util.util import reject_mpi_comm
 
 class DeepGP(Model):
     """
@@ -32,24 +29,13 @@ class DeepGP(Model):
                  inference_method=None, psi_chunk_size=None, psi_threads=1,
                  **kwargs):
         super(DeepGP, self).__init__(name=name)
-        self._IN_OPTIMIZATION_ = False
         
         # Back-forward compatibility with old interface
         if encoder_dims is None and 'MLP_dims' in kwargs:
             encoder_dims = kwargs['MLP_dims']
 
-        # CIP-0001 Phase 2: deprecate MPI; refuse silently-wrong configurations.
-        if mpi_comm is not None:
-            warnings.warn(_MPI_DEPRECATION, FutureWarning, stacklevel=2)
-            if not back_constraint:
-                raise ValueError(
-                    "mpi_comm is not supported with back_constraint=False: "
-                    "per-data-point variational parameters are not synchronised "
-                    "under the root-broadcast design, so results would be wrong. "
-                    "Use back_constraint=True, or omit mpi_comm (see CIP-0001)."
-                )
-        
-        self.mpi_comm, self.mpi_root = mpi_comm, mpi_root
+        # MPI was removed (CIP-0001, CIP-0003); the arguments are kept for compatibility.
+        reject_mpi_comm(mpi_comm)
         self.psi_chunk_size = psi_chunk_size
         self.psi_threads = 1 if psi_threads is None else int(psi_threads)
         self.obs_data = obs_data
@@ -116,12 +102,9 @@ class DeepGP(Model):
                                                         init=inits[i],
                                                         kernel=kernels[i] if kernels is not None else None,
                                                         back_constraint=back_constraint,
-                                                        MLP_dims=mrd_mlp_dims,
-                                                        mpi_comm=mpi_comm,
-                                                        mpi_root=mpi_root))
+                                                        MLP_dims=mrd_mlp_dims))
                 else:
                     if self.X_observed and self.repeatX:
-                        # self.layers.append(ObservedLayer(nDims[0],nDims[1], Y, X=Xs[i], likelihood=likelihood, num_inducing=num_inducing[i], init=inits[i], kernel=kernels[i] if kernels is not None else None, back_constraint=back_constraint, inference_method=inference_method, mpi_comm=mpi_comm, mpi_root=mpi_root))
                         self.layers.append(ObservedLayer(nDims[0],
                                                          Xs[i].shape[1],
                                                          Y, X=Xs[i], likelihood=likelihood,
@@ -130,8 +113,6 @@ class DeepGP(Model):
                                                          kernel=kernels[i] if kernels is not None else None,
                                                          back_constraint=back_constraint,
                                                          inference_method=inference_method,
-                                                         mpi_comm=mpi_comm,
-                                                         mpi_root=mpi_root,
                                                          auto_update=auto_update,
                                                          repeatX=True,
                                                          repeatXsplit=self.nDimsOrig[1],
@@ -148,7 +129,6 @@ class DeepGP(Model):
                                                          kernel=kernels[i] if kernels is not None else None,
                                                          back_constraint=back_constraint,
                                                          inference_method=inference_method,
-                                                         mpi_comm=mpi_comm, mpi_root=mpi_root,
                                                          auto_update=auto_update,
                                                          psi_chunk_size=psi_chunk_size,
                                                          psi_threads=self.psi_threads))
@@ -167,7 +147,6 @@ class DeepGP(Model):
                                                   kernel=kernels[i] if kernels is not None else None,
                                                   back_constraint=True if uncertain_inputs and back_constraint else False,
                                                   inference_method=inference_method,
-                                                  mpi_comm=mpi_comm, mpi_root=mpi_root,
                                                   auto_update=auto_update,
                                                   psi_chunk_size=psi_chunk_size,
                                                   psi_threads=self.psi_threads))
@@ -179,7 +158,6 @@ class DeepGP(Model):
                                                kernel=kernels[i] if kernels is not None else None,
                                                back_constraint=back_constraint,
                                                inference_method=inference_method,
-                                               mpi_comm=mpi_comm, mpi_root=mpi_root,
                                                auto_update=auto_update,
                                                psi_chunk_size=psi_chunk_size,
                                                psi_threads=self.psi_threads))
@@ -193,24 +171,18 @@ class DeepGP(Model):
                 self.enclayers = [EncoderLayer(self.layers[i],
                                                direction=direction,
                                                encoder_dims=encoder_dims[i-1] if encoder_dims is not None else None,
-                                               mpi_comm = mpi_comm,
-                                               mpi_root=mpi_root,
                                                name='enclayer_'+str(i)) for i in range(self.nLayers-1,0,-1)]
             else:
                 # For MRD, layer 0 owns per-view encoders inside ObservedMRDLayer;
                 # EncoderLayer starts at layer 1 (CIP-0002 Phase C).
                 enc_start = 1 if mrd_flag else 0
-                self.enclayers = [ EncoderLayer(self.layers[i], direction=direction, encoder_dims=encoder_dims[i] if encoder_dims is not None else None, mpi_comm = mpi_comm, mpi_root=mpi_root,
-                                            name='enclayer_'+str(i)) for i in range(enc_start, self.nLayers)]
+                self.enclayers = [ EncoderLayer(self.layers[i], direction=direction, encoder_dims=encoder_dims[i] if encoder_dims is not None else None, name='enclayer_'+str(i)) for i in range(enc_start, self.nLayers)]
             self.link_parameters(*(self.enclayers+self.layers))
         else:
             self.link_parameters(*self.layers)
         
         if self.X_observed and self.repeatX:
             self.ensure_repeatX_constraints()
-        if self.mpi_comm is not None:
-            from deepgp.util.parallel import broadcastArrays
-            broadcastArrays([self.param_array], self.mpi_comm, self.mpi_root)
 
     @property
     def Y(self):
@@ -286,8 +258,6 @@ class DeepGP(Model):
             if self._mrd and hasattr(self.layers[0], 'update_encoder_gradients'):
                 self.layers[0].update_encoder_gradients()
             [l.update_gradients() for l in self.enclayers[::-1]]
-            if self.mpi_comm is not None:
-                [l._gather_gradients() for l in self.enclayers]
         
     def add_layer(self, dim_up, X=None,
                   X_variance=None, Z=None,
@@ -313,8 +283,6 @@ class DeepGP(Model):
                                           num_inducing=num_inducing,
                                           name='layer_'+str(self.nLayers), init=init,
                                           kernel=kernel, noise_var=noise_var,
-                                          mpi_comm=self.mpi_comm,
-                                          mpi_root=self.mpi_root,
                                           back_constraint=back_constraint, X=X,
                                           X_variance=X_variance, Z=Z,
                                           uncertain_inputs=uncertain_inputs,
@@ -341,31 +309,10 @@ class DeepGP(Model):
         )
     
     def collect_all_XY(self, root=0):
-        if self.mpi_comm is None:
-            XY = [self.obslayer.Y.copy()]
-            for l in self.layers: XY.append(l.X.copy())
-            return XY
-        else:
-            from mpi4py import MPI
-            from GPy.core.parameterization.variational import NormalPosterior
-            N,D = self.Y.shape
-            N_list = np.array(self.mpi_comm.allgather(N))
-            N_all = np.sum(N_list)
-            Y_all = np.empty((N_all,D)) if self.mpi_comm.rank==root else None
-            self.mpi_comm.Gatherv([self.Y, MPI.DOUBLE], [Y_all, (N_list*D, None), MPI.DOUBLE], root=root)
-            if self.mpi_comm.rank==root:
-                XY = [Y_all]
-            for l in self.layers:
-                Q = l.X.shape[1]
-                X_mean_all =  np.empty((N_all,Q)) if self.mpi_comm.rank==root else None
-                self.mpi_comm.Gatherv([l.X.mean.values, MPI.DOUBLE], [X_mean_all, (N_list*Q, None), MPI.DOUBLE], root=root)
-                X_var_all =  np.empty((N_all,Q)) if self.mpi_comm.rank==root else None
-                self.mpi_comm.Gatherv([l.X.variance.values, MPI.DOUBLE], [X_var_all, (N_list*Q, None), MPI.DOUBLE], root=root)
-                if self.mpi_comm.rank==root:
-                    XY.append(NormalPosterior(X_mean_all, X_var_all))
-            if self.mpi_comm.rank==root: return XY
-            else: return None
-        
+        XY = [self.obslayer.Y.copy()]
+        for l in self.layers: XY.append(l.X.copy())
+        return XY
+
     def predict(self, Xnew, full_cov=False, Y_metadata=None, kern=None):
         """Make a prediction from the deep Gaussian process model for a given input"""
         from GPy.core.parameterization.variational import NormalPosterior
@@ -389,38 +336,6 @@ class DeepGP(Model):
                 x = NormalPosterior(mean, var)
         return self.layers[0].predict(x)
 
-    @Model.optimizer_array.setter
-    def optimizer_array(self, p):
-        if self.mpi_comm != None:
-            if self._IN_OPTIMIZATION_ and self.mpi_comm.rank==self.mpi_root:
-                self.mpi_comm.Bcast(np.int32(1),root=self.mpi_root)
-            self.mpi_comm.Bcast(p, root=self.mpi_root)
-        Model.optimizer_array.fset(self,p)
-
-    def optimize(self, optimizer=None, start=None, **kwargs):
-        self._IN_OPTIMIZATION_ = True
-        if self.mpi_comm is None:
-            super(DeepGP, self).optimize(optimizer,start,**kwargs)
-        elif self.mpi_comm.rank==self.mpi_root:
-            super(DeepGP, self).optimize(optimizer,start,**kwargs)
-            self.mpi_comm.Bcast(np.int32(-1),root=self.mpi_root)
-        elif self.mpi_comm.rank!=self.mpi_root:
-            x = self.optimizer_array.copy()
-            flag = np.empty(1,dtype=np.int32)
-            while True:
-                self.mpi_comm.Bcast(flag,root=self.mpi_root)
-                if flag==1:
-                    try:
-                        self.optimizer_array = x
-                    except (LinAlgError, ZeroDivisionError, ValueError):
-                        pass
-                elif flag==-1:
-                    break
-                else:
-                    self._IN_OPTIMIZATION_ = False
-                    raise Exception("Unrecognizable flag for synchronization!")
-        self._IN_OPTIMIZATION_ = False
-        
     def predict_withSamples(self, X, nSamples=100):
         
         y_mean, y_var = self.layers[-1].predict(X)

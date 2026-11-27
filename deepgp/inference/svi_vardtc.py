@@ -10,10 +10,7 @@ from GPy.inference.latent_function_inference import LatentFunctionInference
 from GPy.inference.latent_function_inference.posterior import Posterior
 log_2_pi = np.log(2*np.pi)
 
-try:
-    from mpi4py import MPI
-except:
-    pass
+from ..util.util import reject_mpi_comm
 
 class SVI_VarDTC(LatentFunctionInference):
     """
@@ -27,8 +24,7 @@ class SVI_VarDTC(LatentFunctionInference):
     """
     const_jitter = 1e-6
     def __init__(self, mpi_comm=None, mpi_root=0, psi_chunk_size=None, psi_threads=1):
-        self.mpi_comm = mpi_comm
-        self.mpi_root=mpi_root
+        reject_mpi_comm(mpi_comm)
         self.psi_chunk_size = psi_chunk_size
         self.psi_threads = 1 if psi_threads is None else int(psi_threads)
     
@@ -88,9 +84,6 @@ class SVI_VarDTC(LatentFunctionInference):
             trYYT = self.get_trYYT(Y)
             YRY = trYYT*beta
             
-        if self.mpi_comm is not None:
-            from ..util.parallel import allReduceArrays
-            psi0, psi2, YRY, psi1Y = allReduceArrays([psi0, psi2, YRY, psi1Y], self.mpi_comm)
         return psi0, psi2, YRY, psi1, psi1Y
 
     def inference(self, kern, X, Z, likelihood, Y, qU_mean ,qU_var, Kuu_sigma=None):
