@@ -4,7 +4,7 @@
 
 A thin shell over :mod:`deepgp.functional.doubly_stochastic`: it holds the
 parameters (kernels, inducing inputs, whitened ``q(u)``, noise) as GPy objects and
-calls the pure functions. Supervised only for now (``X`` is required).
+calls the pure functions. ``X=None`` gives the unsupervised model with latent ``q(X)``.
 
 ``nDims`` follows ``DeepGP``: ``[D_y, ..., D_x]``, output first. ``kernels`` follows
 the same order, so ``kernels[0]`` is the layer that produces ``Y``.
@@ -49,10 +49,14 @@ class WhitenedLayer(Parameterized):
 
 
 class DoublyStochasticDeepGP(Model):
-    """Supervised deep GP trained with doubly stochastic variational inference.
+    """Deep GP trained with doubly stochastic variational inference.
+
+    With ``X=None`` the model is unsupervised: the bottom inputs are latent with
+    ``q(X) = N(X_mean, diag(X_var))``, initialised by PCA of ``Y`` (``nDims[-1]`` is the latent
+    width), sampled by reparameterisation, and regularised by ``KL(q(X) || N(0, I))``.
 
     :param nDims: ``[D_y, ..., D_x]``; hidden widths in between.
-    :param Y: ``(N, D_y)``; :param X: ``(N, D_x)``.
+    :param Y: ``(N, D_y)``; :param X: ``(N, D_x)``, or ``None`` for the unsupervised model.
     :param kernels: optional list in ``nDims`` order (``kernels[0]`` produces ``Y``).
     :param residual: identity mean function on hidden layers where widths allow.
     :param n_samples: Monte Carlo samples per evaluation.
@@ -62,18 +66,29 @@ class DoublyStochasticDeepGP(Model):
 
     def __init__(self, nDims, Y, X, num_inducing=20, kernels=None, noise_var=0.1,
                  n_samples=1, residual=True, batch_size=None, seed=0, jitter=1e-6,
-                 q_sqrt_hidden=1e-2, name='doubly_stochastic_deepgp'):
+                 q_sqrt_hidden=1e-2, q_sqrt_x=0.5, name='doubly_stochastic_deepgp'):
         super(DoublyStochasticDeepGP, self).__init__(name=name)
-        if X is None:
-            raise ValueError("DoublyStochasticDeepGP is supervised only: X is required")
         dims = list(nDims)[::-1]                       # input side first
-        if dims[0] != X.shape[1] or dims[-1] != Y.shape[1]:
-            raise ValueError("nDims %s does not match X (%d) and Y (%d)" % (list(nDims), X.shape[1], Y.shape[1]))
-        if X.shape[0] != Y.shape[0]:
-            raise ValueError("X and Y must have the same number of rows")
+        self.Y_all = np.asarray(Y, float)
+        self.unsupervised = X is None
+        if dims[-1] != self.Y_all.shape[1]:
+            raise ValueError("nDims %s does not match Y (%d)" % (list(nDims), self.Y_all.shape[1]))
+        if not self.unsupervised:
+            if dims[0] != X.shape[1]:
+                raise ValueError("nDims %s does not match X (%d)" % (list(nDims), X.shape[1]))
+            if X.shape[0] != Y.shape[0]:
+                raise ValueError("X and Y must have the same number of rows")
         self.rng = np.random.RandomState(seed)
-        self.X_all, self.Y_all = np.asarray(X, float), np.asarray(Y, float)
-        self.N = X.shape[0]
+        self.N = self.Y_all.shape[0]
+        if self.unsupervised:
+            if len(dims) < 2 or dims[0] > self.Y_all.shape[1]:
+                raise ValueError("latent width %d must be at most the number of outputs %d"
+                                 % (dims[0], self.Y_all.shape[1]))
+            x0 = PCA(self.Y_all).project(self.Y_all, dims[0])
+            x0 = (x0 - x0.mean(0)) / (x0.std(0) + 1e-12)
+            self.X_all = x0
+        else:
+            self.X_all = np.asarray(X, float)
         self.n_samples, self.batch_size, self.jitter = n_samples, batch_size, jitter
         self.idx = np.arange(self.N)
         L = len(dims) - 1
@@ -102,6 +117,10 @@ class DoublyStochasticDeepGP(Model):
                                              residual=bool(residual and hidden and Q == P),
                                              name='layer_%d' % i))
         self.noise_variance = Param('noise_variance', noise_var, Logexp())
+        if self.unsupervised:
+            self.X_mean = Param('X_mean', self.X_all.copy())
+            self.X_var = Param('X_var', np.full(self.X_all.shape, q_sqrt_x ** 2), Logexp())
+            self.link_parameters(self.X_mean, self.X_var)
         self.link_parameters(*(self.layers + [self.noise_variance]))
         self.resample()
 
@@ -113,6 +132,8 @@ class DoublyStochasticDeepGP(Model):
         n = len(self.idx)
         widths = [l.q_mu.shape[1] for l in self.layers[:-1]]
         self.eps = [[self.rng.randn(n, w) for w in widths] for _ in range(self.n_samples)]
+        if self.unsupervised:
+            self.eps_x = [self.rng.randn(n, self.X_all.shape[1]) for _ in range(self.n_samples)]
         self.parameters_changed()
 
     def set_batch(self, idx=None):
@@ -124,10 +145,21 @@ class DoublyStochasticDeepGP(Model):
     def parameters_changed(self):
         if not hasattr(self, 'eps'):
             return
-        X, Y = self.X_all[self.idx], self.Y_all[self.idx]
+        Y = self.Y_all[self.idx]
         layers = [l.as_dict() for l in self.layers]
+        extra = {}
+        if self.unsupervised:
+            X = self.X_mean.values[self.idx]
+            extra = dict(x_var=self.X_var.values[self.idx], eps_x=self.eps_x)
+        else:
+            X = self.X_all[self.idx]
         bound, g = doubly_stochastic_bound(layers, X, Y, float(self.noise_variance.values[0]), self.eps,
-                                           jitter=self.jitter, scale=self.N / float(len(self.idx)))
+                                           jitter=self.jitter, scale=self.N / float(len(self.idx)),
+                                           **extra)
+        if self.unsupervised:
+            gm, gv = np.zeros_like(self.X_all), np.zeros_like(self.X_all)
+            gm[self.idx], gv[self.idx] = g['X'], g['x_var']
+            self.X_mean.gradient, self.X_var.gradient = gm, gv
         self._log_marginal_likelihood = bound
         self._natgrad = g['natgrad']
         for layer, gl in zip(self.layers, g['layers']):

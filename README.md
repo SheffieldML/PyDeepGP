@@ -92,14 +92,16 @@ non-``None`` ``mpi_comm`` to ``DeepGP``, a layer or an inference method raises
 ``SparseGP_MPI`` class name is now an alias of ``SparseGPLayer`` and emits a
 ``FutureWarning``.
 
-Doubly stochastic inference (supervised, new)
----------------------------------------------
+Doubly stochastic inference (new)
+---------------------------------
 
 ``DeepGP(nDims, Y, X, inference_method='doubly_stochastic', ...)`` returns a
 ``DoublyStochasticDeepGP`` (Salimbeni and Deisenroth, 2017): a whitened ``q(u)``
 per layer, reparameterised samples through hidden layers, and a minibatch
-trainer. ``X`` is required (no latent-variable version yet), the likelihood is
-Gaussian, and the default collapsed ``DeepGP`` is unchanged::
+trainer. The likelihood is Gaussian, and the default collapsed ``DeepGP`` is
+unchanged. Pass ``X=None`` for the unsupervised model, with a Gaussian ``q(X)``
+(``m.X_mean``, ``m.X_var``) initialised by PCA of ``Y``. Training can give the top
+layer natural-gradient steps (``fit_minibatch(..., natgrad_gamma=0.1)``)::
 
     m = deepgp.DeepGP([1, 2, 1], Y, X, num_inducing=20,
                       inference_method='doubly_stochastic', seed=0)

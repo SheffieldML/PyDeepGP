@@ -85,5 +85,37 @@ class StackGradientTest(unittest.TestCase):
             doubly_stochastic_bound(bad, X, Y, 0.4, eps)
 
 
+class LatentInputTest(unittest.TestCase):
+    def test_q_x_gradients(self):
+        rng = np.random.RandomState(4)
+        N, Q = 6, 2
+        X, Y = rng.randn(N, Q), rng.randn(N, 3)
+        x_var = 0.2 + rng.rand(N, Q)
+        layers = [_layer(rng, Q, 2, 4, residual=True), _layer(rng, 2, 3, 4)]
+        eps = [[rng.randn(N, 2)] for _ in range(2)]
+        eps_x = [rng.randn(N, Q) for _ in range(2)]
+        kw = dict(scale=2., eps_x=eps_x)
+        F = lambda: doubly_stochastic_bound(layers, X.copy(), Y, 0.4, eps, x_var=x_var.copy(), **kw)[0]
+        _, g = doubly_stochastic_bound(layers, X.copy(), Y, 0.4, eps, x_var=x_var.copy(), **kw)
+        np.testing.assert_allclose(g['X'], _fd(F, X), rtol=1e-5, atol=1e-6)
+        np.testing.assert_allclose(g['x_var'], _fd(F, x_var), rtol=1e-5, atol=1e-6)
+
+    def test_zero_variance_reduces_to_deterministic_input(self):
+        rng = np.random.RandomState(5)
+        X, Y = rng.randn(5, 2), rng.randn(5, 1)
+        layers = [_layer(rng, 2, 1, 4)]
+        b0, _ = doubly_stochastic_bound(layers, X, Y, 0.3, [[]])
+        v = np.full_like(X, 1e-14)
+        b1, _ = doubly_stochastic_bound(layers, X, Y, 0.3, [[]], x_var=v, eps_x=[rng.randn(5, 2)])
+        kl_x = 0.5 * np.sum(X ** 2 + v - 1. - np.log(v))
+        self.assertAlmostEqual(b1, b0 - kl_x, places=6)
+
+    def test_requires_eps_x(self):
+        rng = np.random.RandomState(6)
+        X, Y = rng.randn(5, 2), rng.randn(5, 1)
+        with self.assertRaises(ValueError):
+            doubly_stochastic_bound([_layer(rng, 2, 1, 4)], X, Y, 0.3, [[]], x_var=np.ones_like(X))
+
+
 if __name__ == '__main__':
     unittest.main()

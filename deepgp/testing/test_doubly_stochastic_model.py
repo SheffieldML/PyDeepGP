@@ -47,7 +47,7 @@ class ModelTest(unittest.TestCase):
     def test_validation(self):
         X, Y = _data(10)
         with self.assertRaises(ValueError):
-            DoublyStochasticDeepGP([1, 2, 1], Y, None)
+            DoublyStochasticDeepGP([1, 2, 3], Y, None)   # latent wider than Y
         with self.assertRaises(ValueError):
             DoublyStochasticDeepGP([2, 1], Y, X)
 
@@ -93,3 +93,39 @@ class SelectionByNameTest(unittest.TestCase):
         m = deepgp.DeepGP([1, 2], Y, num_inducing=4, back_constraint=False)
         self.assertIsInstance(m, deepgp.DeepGP)
         self.assertNotIsInstance(m, DoublyStochasticDeepGP)
+
+
+class UnsupervisedTest(unittest.TestCase):
+    def _model(self, **kw):
+        rng = np.random.RandomState(0)
+        t = np.linspace(0, 6, 40)[:, None]
+        Y = np.hstack([np.sin(t), np.cos(t), np.sin(2 * t)]) + 0.05 * rng.randn(40, 3)
+        return Y, DoublyStochasticDeepGP([3, 2, 1], Y, None, num_inducing=8, noise_var=0.05, seed=0, **kw)
+
+    def test_checkgrad(self):
+        _, m = self._model()
+        m.layers[-1].q_mu[:] = 0.3 * np.random.RandomState(1).randn(*m.layers[-1].q_mu.shape)
+        self.assertTrue(m.checkgrad())
+
+    def test_checkgrad_minibatch(self):
+        _, m = self._model()
+        m.layers[-1].q_mu[:] = 0.3 * np.random.RandomState(1).randn(*m.layers[-1].q_mu.shape)
+        m.set_batch(np.arange(0, 40, 3))
+        self.assertTrue(m.checkgrad())
+
+    def test_latent_parameters_exist_and_pca_initialised(self):
+        Y, m = self._model()
+        self.assertEqual(m.X_mean.shape, (40, 1))
+        self.assertEqual(m.X_var.shape, (40, 1))
+        self.assertTrue(m.unsupervised)
+
+    def test_training_improves_bound(self):
+        _, m = self._model()
+        m.set_batch(None)
+        start = m.log_likelihood()
+        m.fit_minibatch(steps=80, batch_size=20, lr=0.02, seed=3)
+        m.set_batch(None)
+        self.assertGreater(m.log_likelihood(), start)
+        mean, var = m.predict(m.X_mean.values[:5])
+        self.assertEqual(mean.shape, (5, 3))
+        self.assertTrue(np.all(var > 0))

@@ -35,13 +35,18 @@ def _check_layers(layers, X):
     return width
 
 
-def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1., kl_scale=1.):
+def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1., kl_scale=1.,
+                           x_var=None, eps_x=None):
     """Bound and gradients for a stack of layers.
 
     :param eps: list over samples; each entry a list with one ``(N, width)`` standard
         normal array per hidden layer (``len(layers) - 1`` arrays; empty for one layer).
+    :param x_var: optional ``(N, Q)`` variances of a Gaussian ``q(X) = N(X, diag(x_var))`` over
+        the bottom inputs (the unsupervised case; ``X`` is then the mean). Each sample draws
+        ``X + sqrt(x_var) * eps_x[s]`` (``eps_x``: one ``(N, Q)`` array per sample) and the bound
+        subtracts ``scale * KL(q(X) || N(0, I))``.
     :returns: ``(bound, grads)`` where ``grads`` has ``layers`` (list of dicts with
-        ``q_mu``, ``q_chol``, ``kern``, ``Z``), ``noise_var``, ``X`` and ``natgrad`` (``g_m (M, P)`` and ``g_S (P, M, M)``: gradients of the
+        ``q_mu``, ``q_chol``, ``kern``, ``Z``), ``noise_var``, ``X``, ``x_var`` (``0.`` unless given) and ``natgrad`` (``g_m (M, P)`` and ``g_S (P, M, M)``: gradients of the
         expected log likelihood, without the KL, with respect to the top layer's ``m`` and ``S``;
         see :func:`whitened_natgrad_step`).
     """
@@ -52,14 +57,16 @@ def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1.,
     N = X.shape[0]
     S = len(eps)
     layer_grads = [dict(q_mu=0., q_chol=0., kern=0., Z=0.) for _ in range(L)]
-    gX, g_noise, ell = 0., 0., 0.
+    gX, g_noise, ell, g_xvar = 0., 0., 0., 0.
+    if x_var is not None and (eps_x is None or len(eps_x) != len(eps)):
+        raise ValueError("x_var needs one eps_x array per sample")
     nat_m, nat_S = 0., 0.
 
-    for sample in eps:
+    for s_idx, sample in enumerate(eps):
         if len(sample) != L - 1:
             raise ValueError("each sample needs %d eps arrays, got %d" % (L - 1, len(sample)))
         inputs, caches, variances = [], [], []
-        h = X
+        h = X if x_var is None else reparam_sample(X, x_var, eps_x[s_idx])
         for l, layer in enumerate(layers):
             inputs.append(h)
             mu, var, cache = whitened_marginals(layer['kern'], layer['Z'].copy(), h.copy(),
@@ -90,6 +97,8 @@ def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1.,
                 g_mu, g_var = reparam_sample_backward(variances[l - 1], sample[l - 1], g_in)
             else:
                 gX = gX + g_in / S
+                if x_var is not None:
+                    g_xvar = g_xvar + reparam_sample_backward(x_var, eps_x[s_idx], g_in)[1] / S
 
     kl = 0.
     for l, layer in enumerate(layers):
@@ -99,5 +108,10 @@ def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1.,
         layer_grads[l]['q_chol'] = layer_grads[l]['q_chol'] - kl_scale * dL
 
     bound = ell / S - kl_scale * kl
-    return bound, dict(layers=layer_grads, noise_var=g_noise / S, X=gX,
+    if x_var is not None:
+        kl_x = 0.5 * np.sum(X ** 2 + x_var - 1. - np.log(x_var))
+        bound -= scale * kl_x
+        gX = gX - scale * X
+        g_xvar = g_xvar - scale * 0.5 * (1. - 1. / x_var)
+    return bound, dict(layers=layer_grads, noise_var=g_noise / S, X=gX, x_var=g_xvar,
                        natgrad=dict(g_m=nat_m, g_S=nat_S))
