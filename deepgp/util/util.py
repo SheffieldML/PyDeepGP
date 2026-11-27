@@ -8,6 +8,34 @@ from GPy.util.pca import PCA
 from GPy.core.parameterization.variational import VariationalPosterior, NormalPosterior
 import sys
 
+
+MPI_REMOVED_MESSAGE = (
+    "MPI support has been removed from PyDeepGP (CIP-0001, CIP-0003). "
+    "Use psi_chunk_size and psi_threads for single-machine scaling; "
+    "mpi_comm must be None."
+)
+
+
+def reject_mpi_comm(mpi_comm):
+    """Raise TypeError if a communicator is passed (the argument is kept for compatibility)."""
+    if mpi_comm is not None:
+        raise TypeError(MPI_REMOVED_MESSAGE)
+
+#: Named initialisers for the latent space X. 'PCA' is the default.
+#: 'rand' and 'random' are synonyms. 'PCA_concat' and 'PCA_single' apply to MRD
+#: layers only (PCA of concatenated views, or one block of dimensions per view).
+INITIALISERS = ('PCA', 'bgplvm', 'randomProjection', 'rand', 'random')
+MRD_INITIALISERS = ('PCA_concat', 'PCA_single')
+
+
+def validate_init(init, mrd=False):
+    """Return ``init`` if it is a known initialiser name, else raise ValueError."""
+    allowed = INITIALISERS + (MRD_INITIALISERS if mrd else ())
+    if init not in allowed:
+        raise ValueError("Unknown initialiser %r; choose from %s" % (init, ', '.join(allowed)))
+    return init
+
+
 def initialize_latent(init, datanum, input_dim, Y):
     Xr = np.random.randn(datanum, input_dim)
     if init == 'PCA':

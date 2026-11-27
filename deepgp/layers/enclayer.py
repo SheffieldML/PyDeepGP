@@ -6,6 +6,7 @@ from GPy.core import Parameterized
 from GPy import Param
 from GPy.core.parameterization.transformations import Logexp
 from GPy.core.parameterization.variational import VariationalPosterior
+from deepgp.util.util import reject_mpi_comm
 
 
 class EncoderLayer(Parameterized):
@@ -20,7 +21,7 @@ class EncoderLayer(Parameterized):
     
     def __init__(self, layer, direction='bottom_up', encoder='mlp', encoder_dims=None, mpi_comm=None, mpi_root=0, name='encoder'):
         super(EncoderLayer, self).__init__(name=name)
-        self.mpi_comm, self.mpi_root = mpi_comm, mpi_root
+        reject_mpi_comm(mpi_comm)
         self.layer = layer
         self.direction = direction
         if direction=='bottom_up':
@@ -44,10 +45,6 @@ class EncoderLayer(Parameterized):
             raise Exception('Unsupported encoder type: '+encoder)
         self.Y_var_common = Param('Y_var', self.Y.variance.values[1].copy(),Logexp())
         
-        # Synchronize across MPI nodes
-        if self.mpi_comm is not None:
-            from ..util.parallel import broadcastArrays
-            broadcastArrays([self.encoder.param_array, self.Y_var_common], self.mpi_comm, self.mpi_root)
         self.link_parameters(self.encoder, self.Y_var_common)
 
     @property
@@ -88,10 +85,3 @@ class EncoderLayer(Parameterized):
         """
         if self.uncertain_input:
             self.X.mean.gradient += X_grad
-            
-    def _gather_gradients(self):
-        # mpi4py infers MPI datatypes from NumPy buffers (CIP-0001 R8).
-        enc_grad = self.encoder.gradient
-        self.mpi_comm.Reduce(enc_grad.copy(), enc_grad, root=self.mpi_root)
-        y_grad = self.Y_var.gradient
-        self.mpi_comm.Reduce(y_grad.copy(), y_grad, root=self.mpi_root)

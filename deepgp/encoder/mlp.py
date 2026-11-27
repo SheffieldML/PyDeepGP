@@ -147,6 +147,11 @@ class MLP(Parameterized):
         if len(X.shape) == 1:
             X = X[None, :]
             dL = dL[None, :]
+        # Reset first: this call *sets* the parameter gradients. Without it, every
+        # repeated parameters_changed() between two predict() calls added another
+        # copy of the gradient (back-constrained MRD checkgrad was off by the
+        # number of repeats).
+        self.prepare()
         _, cache = self.layers[0].forward_all(X)
         X_grad = self.layers[0].backward_all(cache, dL)
         self.layers[0]._update_gradient()

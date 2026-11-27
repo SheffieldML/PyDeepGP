@@ -1,7 +1,7 @@
 
 import numpy as np
 
-from .layers import SparseGP_MPI
+from .layers import SparseGPLayer
 from GPy.core import Parameterized
 from GPy.core import SparseGP
 from GPy import likelihoods
@@ -10,9 +10,10 @@ from GPy.core.parameterization.variational import NormalPosterior, VariationalPo
 from GPy.util.initialization import initialize_latent
 
 from deepgp.util.variational import NormalEntropy,NormalPrior
-from deepgp.util.parallel import reduceArrays
+from deepgp.util.util import reject_mpi_comm
+from ..functional import qx_gradients, aggregate_qx, disaggregate_qx_gradients
 
-class MRDView(SparseGP_MPI):
+class MRDView(SparseGPLayer):
     
     def __init__(self, Y, dim_down, dim_up, likelihood, MLP_dims=None, X=None, X_variance=None, init='rand',  Z=None, num_inducing=10,  kernel=None, inference_method=None, uncertain_inputs=True,mpi_comm=None, mpi_root=0, back_constraint=True, name='mrd-view'):
 
@@ -74,12 +75,9 @@ class MRDView(SparseGP_MPI):
     
     def update_qX_gradients(self):
         # Self.Xv is a placeholder for the gradient part... but we actually use the self.X for the value part (see the 'variational_posterior=' argument below)
-        self.Xv.mean.gradient, self.Xv.variance.gradient = self.kern.gradients_qX_expectations(
-                                            variational_posterior=self.X,
-                                            Z=self.Z,
-                                            dL_dpsi0=self.grad_dict['dL_dpsi0'],
-                                            dL_dpsi1=self.grad_dict['dL_dpsi1'],
-                                            dL_dpsi2=self.grad_dict['dL_dpsi2']) 
+        self.Xv.mean.gradient, self.Xv.variance.gradient = qx_gradients(
+            self.kern, self.Z, self.X, self.grad_dict['dL_dpsi0'],
+            self.grad_dict['dL_dpsi1'], self.grad_dict['dL_dpsi2'])
 
     def update_gradients(self):
         super(MRDView, self).parameters_changed()
@@ -120,7 +118,7 @@ class MRDLayer(Parameterized):
                 "hidden widths, or None for the default encoder width)."
             )
         super(MRDLayer, self).__init__(name=name)
-        self.mpi_comm, self.mpi_root = mpi_comm, mpi_root
+        reject_mpi_comm(mpi_comm)
 
         self.back_constraint = True if back_constraint else False
 
@@ -141,6 +139,10 @@ class MRDLayer(Parameterized):
         self.link_parameters(*self.views)
         for v in self.views: v.X = self.X
         self.link_parameters(self.X)
+        if self.back_constraint:
+            # q(X) is derived from the view encoders on every update, so it is not free.
+            self.X.mean.fix(warning=False)
+            self.X.variance.fix(warning=False)
 
 
     def _aggregate_qX(self):
@@ -151,12 +153,11 @@ class MRDLayer(Parameterized):
                 self.X.mean[:]  = 0
                 self.X.variance[:] = 0
             
-            self.prec_denom = np.zeros_like(self.X.variance.values)
-            for v in self.views:
-                self.prec_denom += 1./v.Xv.variance.values
-                self.X.mean += v.Xv.mean.values/v.Xv.variance.values        
-            self.X.mean /= self.prec_denom
-            self.X.variance[:]  = 1./self.prec_denom
+            mean, var, self.prec_denom = aggregate_qx(
+                [v.Xv.mean.values for v in self.views],
+                [v.Xv.variance.values for v in self.views])
+            self.X.mean[:] = mean
+            self.X.variance[:] = var
         else:
             for v in self.views:
                 v.X = self.X
@@ -182,19 +183,19 @@ class MRDLayer(Parameterized):
 
     def update_qX_gradients(self):
         delta = -self.variationalterm.comp_value(self.X)
-        if self.mpi_comm is not None:
-            delta = reduceArrays([np.float64(delta)],self.mpi_comm, self.mpi_root)[0]
-            if self.mpi_comm.rank != self.mpi_root: delta = 0
         self._log_marginal_likelihood += delta
         self.variationalterm.update_gradients(self.X)
         
     def update_encoder_gradients(self):
         if self.uncertain_inputs:
-            for v in self.views:
-                c = 1./(self.prec_denom*v.Xv.variance.values)
-                v.Xv.mean.gradient[:] = c*self.X.mean.gradient
-                v.Xv.variance.gradient[:] = np.square(c)*self.X.variance.gradient +\
-                                                     c*(self.X.mean.values-v.Xv.mean.values)/v.Xv.variance.values*self.X.mean.gradient
+            grads = disaggregate_qx_gradients(
+                [v.Xv.mean.values for v in self.views],
+                [v.Xv.variance.values for v in self.views],
+                self.prec_denom, self.X.mean.values,
+                self.X.mean.gradient, self.X.variance.gradient)
+            for v, (dm, dv) in zip(self.views, grads):
+                v.Xv.mean.gradient[:] = dm
+                v.Xv.variance.gradient[:] = dv
                 v.update_encoder_gradients()
 
     def parameters_changed(self):

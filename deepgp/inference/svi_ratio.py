@@ -10,10 +10,7 @@ from GPy.inference.latent_function_inference import LatentFunctionInference
 from GPy.inference.latent_function_inference.posterior import Posterior
 log_2_pi = np.log(2*np.pi)
 
-try:
-    from mpi4py import MPI
-except:
-    pass
+from ..util.util import reject_mpi_comm
 
 class SVI_Ratio(LatentFunctionInference):
     """
@@ -22,7 +19,7 @@ class SVI_Ratio(LatentFunctionInference):
     const_jitter = 1e-6
     def __init__(self, mpi_comm=None):
 
-        self.mpi_comm = mpi_comm
+        reject_mpi_comm(mpi_comm)
     
     def get_trYYT(self, Y):
         return np.sum(np.square(Y))

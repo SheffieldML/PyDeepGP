@@ -42,9 +42,8 @@ tox
 ```
 
 Coverage is gated on the maintained serial DeepGP path, including the NumPy
-encoder and MRD (see `.coveragerc`). MPI parallel inference and prediction-only
-SVI helpers remain omitted until those paths are removed or revived
-(CIP-0001 Phases 2–4).
+encoder and MRD (see `.coveragerc`). Prediction-only SVI helpers remain
+omitted until those paths are removed or revived (CIP-0001 Phases 2–4).
 
 Pre-commit (notebooks)
 ----------------------
@@ -83,15 +82,32 @@ hidden widths (e.g. ``[[[4], [4]], [3]]``); higher indices feed the usual
 ``EncoderLayer`` stack for layers above the MRD leaf. See
 ``examples/example_mrd.py``.
 
-MPI (deprecated)
-----------------
+MPI (removed)
+-------------
 
-Passing ``mpi_comm`` to ``DeepGP`` emits a ``FutureWarning`` (CIP-0001). Use
-serial models for now; chunked psi-statistics (Phase 3) will replace the
-single-machine role of MPI. ``mpi_comm`` with ``back_constraint=False`` raises
-``ValueError`` (that configuration produced silently wrong results).
+MPI parallel inference has been removed (CIP-0001, CIP-0003). Passing a
+non-``None`` ``mpi_comm`` to ``DeepGP``, a layer or an inference method raises
+``TypeError``; ``mpi_comm=None`` is still accepted. Use chunked psi-statistics
+(``psi_chunk_size``, ``psi_threads``) for single-machine scaling. The old
+``SparseGP_MPI`` class name is now an alias of ``SparseGPLayer`` and emits a
+``FutureWarning``.
 
-An optional GitHub Actions job runs a 2-rank parity check while MPI remains.
+Doubly stochastic inference (new)
+---------------------------------
+
+``DeepGP(nDims, Y, X, inference_method='doubly_stochastic', ...)`` returns a
+``DoublyStochasticDeepGP`` (Salimbeni and Deisenroth, 2017): a whitened ``q(u)``
+per layer, reparameterised samples through hidden layers, and a minibatch
+trainer. The likelihood is Gaussian, and the default collapsed ``DeepGP`` is
+unchanged. Pass ``X=None`` for the unsupervised model, with a Gaussian ``q(X)``
+(``m.X_mean``, ``m.X_var``) initialised by PCA of ``Y``. Training can give the top
+layer natural-gradient steps (``fit_minibatch(..., natgrad_gamma=0.1)``)::
+
+    m = deepgp.DeepGP([1, 2, 1], Y, X, num_inducing=20,
+                      inference_method='doubly_stochastic', seed=0)
+    m.optimize(max_iters=200)                    # fixed samples: deterministic
+    m.fit_minibatch(steps=500, batch_size=50)    # fresh batch and samples each step
+    mean, var = m.predict(Xnew)
 
 Psi chunking (optional)
 -----------------------
