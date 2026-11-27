@@ -24,14 +24,19 @@ kernel *object* as its single non-array argument, since GPy kernels are not yet
 pure functions (GPy CIP-000F Stage 2). It never touches ``Param`` objects,
 observers or communicators and returns plain arrays; the shell assigns them.
 
-The uncollapsed family (CIP-0003 Phase 4) will implement the same two roles:
-forward marginals at supplied inputs, and gradient routing from upstream
-gradients to parameters.
+The uncollapsed family (CIP-0003 Phase 4) implements the same two roles in
+``uncollapsed.py``: :func:`whitened_marginals` (forward marginals at supplied
+inputs) and :func:`whitened_marginals_backward` (upstream gradients to
+parameters and to the inputs, so they continue to the layer below).
 """
 
 from .collapsed import collapsed_bound
 from .gradients import route_gradients
+from .uncollapsed import (whitened_marginals, whitened_marginals_backward, whitened_kl,
+                          reparam_sample, reparam_sample_backward)
 from .qx import qx_gradients, aggregate_qx, disaggregate_qx_gradients
 
 __all__ = ["collapsed_bound", "route_gradients", "qx_gradients",
-           "aggregate_qx", "disaggregate_qx_gradients"]
+           "aggregate_qx", "disaggregate_qx_gradients",
+           "whitened_marginals", "whitened_marginals_backward", "whitened_kl",
+           "reparam_sample", "reparam_sample_backward"]
