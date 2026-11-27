@@ -21,8 +21,8 @@ class MRDView(SparseGP_MPI):
         self.scale = 1.
 
         if back_constraint:
-            from .mlp import MLP
             from copy import deepcopy
+            from deepgp.encoder.mlp import MLP
             self.encoder = MLP([dim_down, int((dim_down+dim_up)*2./3.), int((dim_down+dim_up)/3.), dim_up] if MLP_dims is None else [dim_down]+deepcopy(MLP_dims)+[dim_up])
             X = self.encoder.predict(Y.mean.values if isinstance(Y, VariationalPosterior) else Y)
             X_variance = 0.0001*np.ones(X.shape)
@@ -31,7 +31,10 @@ class MRDView(SparseGP_MPI):
             self.back_constraint = False
 
         if Z is None:
-            Z = np.random.rand(num_inducing, dim_up)*2-1. #np.random.permutation(X.copy())[:num_inducing]
+            # Match Layer.__init__: random inducing inputs in [-1, 1].
+            Z = np.random.rand(num_inducing, dim_up) * 2 - 1
+        if X is None:
+            raise ValueError("MRDView requires X (or back_constraint=True to encode it from Y)")
         assert Z.shape[1] == X.shape[1]
         
         if likelihood is None: likelihood = likelihoods.Gaussian(variance=Y.var()*0.01)
@@ -111,6 +114,11 @@ class MRDLayer(Parameterized):
         Y = self.Y if self.layer_lower is None else self.layer_lower.X
         assert isinstance(dim_down, list) or isinstance(dim_down, tuple)
         assert isinstance(kernel, list) and len(kernel)==len(dim_down), "The number of kernels has to be equal to the number of input modalities!"
+        if MLP_dims is not None:
+            assert isinstance(MLP_dims, (list, tuple)) and len(MLP_dims) == len(dim_down), (
+                "MLP_dims must be a list with one entry per view (each entry a list of "
+                "hidden widths, or None for the default encoder width)."
+            )
         super(MRDLayer, self).__init__(name=name)
         self.mpi_comm, self.mpi_root = mpi_comm, mpi_root
 
@@ -190,16 +198,30 @@ class MRDLayer(Parameterized):
                 v.update_encoder_gradients()
 
     def parameters_changed(self):
-        self._aggregate_qX()
-        self.X.mean.gradient[:] = 0
-        self.X.variance.gradient[:] = 0
-        for v in self.views:
-            v.update_gradients()
-            self.X.mean.gradient += v.Xv.mean.gradient
-            self.X.variance.gradient += v.Xv.variance.gradient
+        # Writing into self.X during aggregation notifies observers; guard re-entry.
+        if getattr(self, '_in_parameters_changed', False):
+            return
+        self._in_parameters_changed = True
+        try:
+            if self.back_constraint:
+                # Refresh each view's Xv from its encoder before aggregating q(X).
+                for v in self.views:
+                    v.parameters_changed()
+            self._aggregate_qX()
+            self.X.mean.gradient[:] = 0
+            self.X.variance.gradient[:] = 0
+            for v in self.views:
+                v.update_gradients()
+                self.X.mean.gradient += v.Xv.mean.gradient
+                self.X.variance.gradient += v.Xv.variance.gradient
 
-        self._log_marginal_likelihood = np.sum([v._log_marginal_likelihood for v in self.views])
-        self.update_qX_gradients()
+            # Keep shape (1,) like SparseGP layers so DeepGP.parameters_changed can sum.
+            self._log_marginal_likelihood = np.sum(
+                [np.asarray(v._log_marginal_likelihood) for v in self.views], axis=0
+            )
+            self.update_qX_gradients()
+        finally:
+            self._in_parameters_changed = False
 
 class ObservedMRDLayer(MRDLayer):
 
@@ -226,11 +248,13 @@ class ObservedMRDLayer(MRDLayer):
     def _init_X(self, Ylist, input_dim, init='PCA'):
         if Ylist is None:
             Ylist = self.Ylist
-        if init in "PCA_concat":
+        # Equality checks (legacy code used `init in "PCA_concat"`, which is
+        # substring/character membership and mis-routes several spellings).
+        if init in ('PCA', 'PCA_concat'):
             print('# Initializing latent space with: PCA_concat')
             X, fracs = initialize_latent('PCA', input_dim, np.hstack(Ylist))
             fracs = [fracs]*len(Ylist)
-        elif init in "PCA_single":
+        elif init == 'PCA_single':
             print('# Initializing latent space with: PCA_single')
             X = np.zeros((Ylist[0].shape[0], input_dim))
             fracs = []
@@ -238,7 +262,7 @@ class ObservedMRDLayer(MRDLayer):
                 x,frcs = initialize_latent('PCA', len(qs), Y)
                 X[:, qs] = x
                 fracs.append(frcs)
-        else: # init == 'random':
+        else:  # 'random', 'rand', or unknown → random
             print('# Initializing latent space with: random')
             X = np.random.randn(Ylist[0].shape[0], input_dim)
             fracs = X.var(0)

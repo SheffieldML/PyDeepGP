@@ -33,7 +33,9 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           # Install runtime + test deps explicitly: editable metadata from
           # setup.py is not reliably applied by current pip/setuptools.
-          python -m pip install "numpy>=1.7" "scipy>=0.12" "GPy>=1.15" matplotlib h5py tables "coverage>=7.0"
+          python -m pip install "numpy>=1.7" "scipy>=0.12" matplotlib h5py tables "coverage>=7.0"
+          # CIP-0001 Phase 3 needs GPy psicomp chunk_size (merged in GPy #1299; not yet on PyPI).
+          python -m pip install "git+https://github.com/SheffieldML/GPy.git@main"
           python -m pip install -e . --no-deps
 
       - name: Run unit tests with coverage
@@ -45,3 +47,41 @@ jobs:
       - name: Upload coverage XML
         if: always()
         run: python -m coverage xml -o coverage.xml
+
+      # Single-matrix upload (informational). Matrix jobs still gate with --fail-under=60.
+      - name: Upload coverage to Codecov
+        if: always() && matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: ubuntu-3.12
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # CIP-0001 R11: optional MPI parity while mpi4py support still exists.
+  mpi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install MPI and Python deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libopenmpi-dev openmpi-bin
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install "numpy>=1.7" "scipy>=0.12" matplotlib h5py tables mpi4py
+          python -m pip install "git+https://github.com/SheffieldML/GPy.git@main"
+          python -m pip install -e . --no-deps
+
+      - name: MPI parity (2 ranks vs serial)
+        env:
+          OMPI_MCA_btl_vader_single_copy_mechanism: none
+          OMPI_MCA_rmaps_base_oversubscribe: 'true'
+        run: mpiexec -n 2 python -m deepgp.testing.mpi_parity
