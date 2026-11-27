@@ -139,6 +139,10 @@ class MRDLayer(Parameterized):
         self.link_parameters(*self.views)
         for v in self.views: v.X = self.X
         self.link_parameters(self.X)
+        if self.back_constraint:
+            # q(X) is derived from the view encoders on every update, so it is not free.
+            self.X.mean.fix(warning=False)
+            self.X.variance.fix(warning=False)
 
 
     def _aggregate_qX(self):

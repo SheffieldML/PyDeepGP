@@ -1,7 +1,7 @@
 ---
 id: "2026-11-27_mrd-back-constraint-gradients"
 title: "Back-constrained MRD layer fails checkgrad (encoder and X_var gradients)"
-status: "Proposed"
+status: "Completed"
 priority: "High"
 created: "2026-11-27"
 last_updated: "2026-11-27"
@@ -43,3 +43,13 @@ Observed with `m.checkgrad(verbose=True)`:
 ### 2026-11-27
 
 Found; test marked `expectedFailure` so CI records it without blocking the maintained path.
+
+## Progress Updates
+
+### 2026-11-27
+Fixed. Two independent causes:
+
+1. `MLP.update_gradient` accumulated into the layer gradient buffers, which were only reset by `predict`. Each repeated `parameters_changed` between two `predict` calls added another copy of the encoder gradient, so the analytic gradient was an integer multiple of the true one (5x in the repro). `update_gradient` now resets the buffers first and is idempotent.
+2. In back-constrained mode the aggregate q(X) (`latent_space`) is derived from the view encoders on every update but was a free parameter, so `checkgrad` (and any optimiser) saw nonzero analytic gradients against zero numerical ones. It is now fixed.
+
+The `X_var` gradients were correct throughout. `test_mrd_back_constrained_checkgrad` is no longer an expected failure; full suite 75 passed.

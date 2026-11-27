@@ -164,7 +164,6 @@ class MRDCheckgradTest(unittest.TestCase):
     # Known defect (backlog/bugs/2026-11-27_mrd-back-constraint-gradients.md): the
     # encoder (MLP) gradients are a constant factor 5 from numerical, and the
     # shared X_var gradient is lost. Present before the CIP-0003 extraction.
-    @unittest.expectedFailure
     def test_mrd_back_constrained_checkgrad(self):
         Y1, Y2 = self._views()
         m = deepgp.DeepGP([[3, 3], 2], [Y1, Y2], kernels=[self._kernels(2)],
