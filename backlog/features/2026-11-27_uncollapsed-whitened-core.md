@@ -115,3 +115,21 @@ The gate (L=3: RMSE <= 0.26, NLL <= 0, beats one layer) is met. GPc's RBF number
 **CMU** subject 35 walk 01 (358 frames, 62-D; train on even frames, predict odd frames from interpolated top latents, `[62, 5, 3]`, M=25; held-out RMSE on standardised data, predicting the mean gives 0.95): collapsed 0.438, doubly stochastic 0.281, with natgrad 0.265.
 
 Caveats: single seeds; the collapsed model used the repository's example initialisation and is probably under-tuned (seed 1 landed in a poor optimum), so these runs do not show that doubly stochastic inference is better in general, only that it trains reliably here. Wall time is much longer for the doubly stochastic runs (100-870 s versus 8-225 s) because it is pure NumPy with per-sample Python loops. The CMU metric tests latent smoothness, not dynamics.
+
+### 2026-11-27 (tuning slice 1: speed and seeds)
+
+`fit_minibatch` recomputed the bound after every parameter write; it now defers that to the next
+`resample`. A step is about 1.8x faster (profile: 0.97 s to 0.53 s for 20 steps, N=1000, M=64, two
+layers), and `fit_minibatch` results are unchanged in kind (123 tests pass). The remaining cost is
+mostly GPy kernel gradient routing, so a further gain needs batched kernel calls.
+
+V8, 3000 iterations, batch 256, seeds 0 to 2 (test RMSE / NLL):
+
+| L | seed 0 | seed 1 | seed 2 | seconds per run |
+|---|--------|--------|--------|-----------------|
+| 1 | 0.772 / 1.151 | 0.766 / 1.144 | 0.766 / 1.144 | 40 to 48 |
+| 2 | 0.204 / -0.193 | 0.212 / -0.180 | 0.207 / -0.192 | 50 to 102 |
+| 3 | 0.207 / -0.188 | 0.210 / -0.190 | 0.218 / -0.159 | 120 to 172 |
+
+The gate is met on every seed, and the spread across seeds is about 0.01 in RMSE. A third layer
+does not improve on two on this task. GPc-style initialisation (chi = 1/L) is not yet tried.
