@@ -33,11 +33,13 @@ parameters and to the inputs, so they continue to the layer below).
 from .collapsed import collapsed_bound
 from .gradients import route_gradients
 from .uncollapsed import (whitened_marginals, whitened_marginals_backward, whitened_kl,
-                          reparam_sample, reparam_sample_backward)
+                          reparam_sample, reparam_sample_backward,
+                          whitened_expectation_grads, whitened_natgrad_step)
 from .doubly_stochastic import doubly_stochastic_bound
 from .qx import qx_gradients, aggregate_qx, disaggregate_qx_gradients
 
 __all__ = ["collapsed_bound", "route_gradients", "qx_gradients",
            "aggregate_qx", "disaggregate_qx_gradients",
            "whitened_marginals", "whitened_marginals_backward", "whitened_kl",
-           "reparam_sample", "reparam_sample_backward", "doubly_stochastic_bound"]
+           "reparam_sample", "reparam_sample_backward", "doubly_stochastic_bound",
+           "whitened_expectation_grads", "whitened_natgrad_step"]

@@ -21,7 +21,8 @@ recommend for hidden layers.
 import numpy as np
 
 from .uncollapsed import (whitened_marginals, whitened_marginals_backward, whitened_kl,
-                          reparam_sample, reparam_sample_backward)
+                          reparam_sample, reparam_sample_backward,
+                          whitened_expectation_grads)
 
 
 def _check_layers(layers, X):
@@ -40,7 +41,9 @@ def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1.,
     :param eps: list over samples; each entry a list with one ``(N, width)`` standard
         normal array per hidden layer (``len(layers) - 1`` arrays; empty for one layer).
     :returns: ``(bound, grads)`` where ``grads`` has ``layers`` (list of dicts with
-        ``q_mu``, ``q_chol``, ``kern``, ``Z``), ``noise_var`` and ``X``.
+        ``q_mu``, ``q_chol``, ``kern``, ``Z``), ``noise_var``, ``X`` and ``natgrad`` (``g_m (M, P)`` and ``g_S (P, M, M)``: gradients of the
+        expected log likelihood, without the KL, with respect to the top layer's ``m`` and ``S``;
+        see :func:`whitened_natgrad_step`).
     """
     L = len(layers)
     out_width = _check_layers(layers, X)
@@ -50,6 +53,7 @@ def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1.,
     S = len(eps)
     layer_grads = [dict(q_mu=0., q_chol=0., kern=0., Z=0.) for _ in range(L)]
     gX, g_noise, ell = 0., 0., 0.
+    nat_m, nat_S = 0., 0.
 
     for sample in eps:
         if len(sample) != L - 1:
@@ -77,6 +81,10 @@ def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1.,
                                             caches[l], g_mu, g_var)
             for k in ('q_mu', 'q_chol', 'kern', 'Z'):
                 layer_grads[l][k] = layer_grads[l][k] + g[k] / S
+            if l == L - 1:
+                gm, gS = whitened_expectation_grads(caches[l], g_mu, g_var)
+                nat_m = nat_m + gm / S
+                nat_S = nat_S + gS / S
             g_in = g['X'] + (g_mu if layer.get('residual', False) else 0.)
             if l > 0:
                 g_mu, g_var = reparam_sample_backward(variances[l - 1], sample[l - 1], g_in)
@@ -91,4 +99,5 @@ def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1.,
         layer_grads[l]['q_chol'] = layer_grads[l]['q_chol'] - kl_scale * dL
 
     bound = ell / S - kl_scale * kl
-    return bound, dict(layers=layer_grads, noise_var=g_noise / S, X=gX)
+    return bound, dict(layers=layer_grads, noise_var=g_noise / S, X=gX,
+                       natgrad=dict(g_m=nat_m, g_S=nat_S))

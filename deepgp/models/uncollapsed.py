@@ -23,7 +23,8 @@ from GPy.core.parameterization.transformations import Logexp
 from GPy.util import choleskies
 from GPy.util.pca import PCA
 
-from ..functional import (doubly_stochastic_bound, whitened_marginals, reparam_sample)
+from ..functional import (doubly_stochastic_bound, whitened_marginals, reparam_sample,
+                          whitened_natgrad_step)
 
 
 class WhitenedLayer(Parameterized):
@@ -128,6 +129,7 @@ class DoublyStochasticDeepGP(Model):
         bound, g = doubly_stochastic_bound(layers, X, Y, float(self.noise_variance.values[0]), self.eps,
                                            jitter=self.jitter, scale=self.N / float(len(self.idx)))
         self._log_marginal_likelihood = bound
+        self._natgrad = g['natgrad']
         for layer, gl in zip(self.layers, g['layers']):
             layer.kern.gradient = gl['kern']
             layer.Z.gradient = gl['Z']
@@ -140,11 +142,15 @@ class DoublyStochasticDeepGP(Model):
 
     # --- training ---------------------------------------------------------
     def fit_minibatch(self, steps=200, batch_size=None, lr=0.01, beta1=0.9, beta2=0.999,
-                      seed=None, callback=None):
+                      seed=None, callback=None, natgrad_gamma=0.):
         """Adam on minibatches; fresh batch and ``eps`` every step, from the model's generator.
 
         Parameters are updated in GPy's unconstrained space. At the end the full batch
         is restored and ``eps`` redrawn. Returns the list of per-step bounds.
+
+        With ``natgrad_gamma > 0`` the top layer's ``q(u)`` takes a natural-gradient step of
+        that size (see ``whitened_natgrad_step``) instead of an Adam step, and everything
+        else stays on Adam: the hybrid scheme of Salimbeni, Eleftheriadis and Hensman (2018).
         """
         if seed is not None:
             self.rng = np.random.RandomState(seed)
@@ -155,10 +161,20 @@ class DoublyStochasticDeepGP(Model):
             self.idx = self.rng.permutation(self.N)[:B]
             self.resample()
             obj_grad = -self._log_likelihood_gradients()      # gradient of minimised objective
+            if natgrad_gamma > 0.:
+                top = self.layers[-1]
+                new_mu, new_chol = whitened_natgrad_step(
+                    top.q_mu.values, top.q_chol, self._natgrad['g_m'], self._natgrad['g_S'],
+                    natgrad_gamma)
+                new_flat = choleskies.triang_to_flat(new_chol)
             m = beta1 * m + (1 - beta1) * obj_grad
             v = beta2 * v + (1 - beta2) * obj_grad ** 2
             theta = theta - lr * (m / (1 - beta1 ** t)) / (np.sqrt(v / (1 - beta2 ** t)) + 1e-8)
             self.optimizer_array = theta
+            if natgrad_gamma > 0.:
+                top.q_mu[:] = new_mu
+                top.q_chol_flat[:] = new_flat
+                theta = self.optimizer_array.copy()
             history.append(self._log_marginal_likelihood)
             if callback is not None:
                 callback(t, history[-1])

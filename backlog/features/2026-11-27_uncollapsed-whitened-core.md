@@ -79,3 +79,8 @@ Remaining: natural gradients, unsupervised (latent `X`), GPc CIP-0035 cross-chec
 - One layer: ELBO agrees to 1e-4, KL to 1e-6, predictive mean and variance to 1e-5 (GPc RBF is `variance * exp(-0.5 * inverseWidth * r^2)`, so `lengthscale = inverseWidth^-0.5`; GPc beta is a precision).
 - Two and three layers (Monte Carlo, GPc's `elbo()` averaged over 4000 calls): agreement within four combined standard errors; per-layer KL agree.
 Not done: the V8 composite-task reproduction (RMSE <= 0.26, NLL <= 0) needs training and the GPc task generator; it remains open for Phase 5.
+
+### 2026-11-27 (slice 5: natural gradients)
+
+`whitened_expectation_grads` and `whitened_natgrad_step` in `deepgp/functional/uncollapsed.py`; the bound now also returns `natgrad` (`g_m`, `g_S` for the top layer, data term only). `DoublyStochasticDeepGP.fit_minibatch(..., natgrad_gamma=g)` updates the top layer's `q(u)` by `theta <- (1-g) theta + g (theta_prior + grad_eta ELL)` and leaves everything else on Adam (the hybrid scheme of Salimbeni, Eleftheriadis and Hensman 2018, as in GPc's `natgrad_gamma`). Tests (`test_natgrad.py`): with `gamma = 1` on the full data and one layer the step reaches the analytic optimum `S = (I + B B^T / noise)^-1`, `m = S B y / noise` and the `q(u)` gradients vanish; small steps increase the bound; `g_S` is consistent with the Cholesky gradient; hybrid training is deterministic for equal seeds.
+Hidden layers stay on Adam. Not compared with GPc's trained trajectories.

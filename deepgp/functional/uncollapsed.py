@@ -108,3 +108,52 @@ def reparam_sample(mu, var, eps):
 def reparam_sample_backward(var, eps, dL_df):
     """Gradients ``(dL_dmu, dL_dvar)`` of :func:`reparam_sample`."""
     return dL_df, dL_df * eps / (2. * np.sqrt(var))
+
+
+def whitened_expectation_grads(cache, dL_dmu, dL_dvar):
+    """Gradients of the data term w.r.t. ``m_p`` and ``S_p`` (not ``L_p``).
+
+    With ``mu_p = B^T m_p`` and ``var_p = ... + b^T S_p b`` these are
+    ``g_m = B dL_dmu`` and ``g_S[p] = B diag(dL_dvar[:, p]) B^T``, the quantities a
+    natural-gradient step needs. Excludes the KL.
+
+    :returns: ``(g_m (M, P), g_S (P, M, M))``.
+    """
+    B = cache['B']
+    g_m = B @ dL_dmu
+    g_S = np.einsum('mn,np,kn->pmk', B, dL_dvar, B)
+    return g_m, g_S
+
+
+def whitened_natgrad_step(q_mu, q_chol, g_m, g_S, gamma):
+    """One natural-gradient step on ``q(v_p) = N(m_p, S_p)`` for ``ELL - KL(q || N(0, I))``.
+
+    In natural parameters ``theta1 = S^-1 m``, ``theta2 = -S^-1 / 2`` the natural gradient
+    equals the gradient in expectation parameters ``eta = (m, S + m m^T)``, and the KL
+    contributes ``theta_prior - theta`` with ``theta_prior = (0, -I/2)``. A step of size
+    ``gamma`` therefore moves
+
+        theta <- (1 - gamma) theta + gamma (theta_prior + grad_eta ELL),
+
+    with ``grad_eta1 ELL = g_m - 2 g_S m`` and ``grad_eta2 ELL = g_S``. For a Gaussian
+    likelihood ``gamma = 1`` on the full data reaches the optimum of ``q`` in one step.
+    ``g_S`` must be negative semi-definite so that the precision stays positive definite.
+
+    :returns: ``(q_mu_new, q_chol_new)``.
+    """
+    M, P = q_mu.shape
+    new_mu, new_chol = np.empty_like(q_mu), np.empty_like(q_chol)
+    for p in range(P):
+        L = q_chol[p]
+        S = L @ L.T
+        Lam = np.linalg.inv(S)
+        theta1 = Lam @ q_mu[:, p]
+        gS = 0.5 * (g_S[p] + g_S[p].T)
+        theta1 = (1. - gamma) * theta1 + gamma * (g_m[:, p] - 2. * gS @ q_mu[:, p])
+        Lam_new = (1. - gamma) * Lam + gamma * (np.eye(M) - 2. * gS)
+        Lam_new = 0.5 * (Lam_new + Lam_new.T)
+        S_new = np.linalg.inv(Lam_new)
+        S_new = 0.5 * (S_new + S_new.T)
+        new_mu[:, p] = S_new @ theta1
+        new_chol[p] = np.linalg.cholesky(S_new)
+    return new_mu, new_chol
