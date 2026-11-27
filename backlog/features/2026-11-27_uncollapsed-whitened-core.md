@@ -30,7 +30,7 @@ Phase 4 of CIP-0003. GPy's SVGP cannot serve as a hidden layer (CIP-0003, Resolv
 - [x] Marginals agree with a dense unwhitened computation
 - [x] Backward pass passes finite-difference checks for every output
 - [x] Gradients flow through a two-layer stack with frozen `eps`
-- [ ] Doubly stochastic bound, with a likelihood at the top, passes `checkgrad`
+- [x] Doubly stochastic bound, with a likelihood at the top, passes finite-difference gradient checks (the `checkgrad`-style test on the `DeepGP` shell comes with the shell)
 - [ ] `DeepGP`-level shell with inference selectable by name; default unchanged
 - [ ] Minibatching with a seeded generator
 - [ ] Reproduce GPc CIP-0035 reference numbers on a shared small problem (Phase 5 overlap)
@@ -52,3 +52,12 @@ Slice 1 done (`deepgp/functional/uncollapsed.py`, `deepgp/testing/test_uncollaps
 - Testing note: GPy kernels cache on array identity and parameter writes need the `Parameterized` API, so finite-difference checks pass copies and set kernel values with `kern[:] = ...`.
 
 Next slice: the doubly stochastic bound over a stack (likelihood at the top, KL per layer), with a `checkgrad`-style test.
+
+### 2026-11-27 (slice 2)
+
+`deepgp/functional/doubly_stochastic.py` (`doubly_stochastic_bound`), tests in `deepgp/testing/test_doubly_stochastic.py` (95 passed overall):
+- Gaussian likelihood at the top, per-layer whitened KL, reparameterised samples through hidden layers with caller-supplied `eps`, `scale` for minibatches, optional residual (identity) mean on hidden layers.
+- With one layer the bound equals GPy `SVGP`'s `log_likelihood` (to 1e-4 relative; the difference is jitter handling) once `q(u)` is mapped between whitened and unwhitened forms.
+- Finite-difference checks pass for `q(u)`, kernels, `Z`, inputs and the noise variance on a three-layer stack, with and without residual means, two samples.
+
+Remaining: `DeepGP`-shaped shell with inference selectable by name, seeded minibatching, natural gradients, GPc cross-check. Non-Gaussian likelihoods at the top are not covered yet.
