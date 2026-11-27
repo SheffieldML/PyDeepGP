@@ -86,6 +86,8 @@ class DeepGP(Model):
         # Parameters which exist differently per layer but specified as single componenents are here expanded to each layer
         if not isinstance(num_inducing, list or tuple): num_inducing = [num_inducing]*self.nLayers
         if not isinstance(inits, list or tuple): inits = [inits]*self.nLayers
+        from ..util.util import validate_init
+        for _init in inits: validate_init(_init, mrd=mrd_flag)
         
         # Initialize Layers
         self.layers = []

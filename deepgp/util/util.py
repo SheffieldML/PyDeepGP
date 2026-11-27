@@ -21,6 +21,21 @@ def reject_mpi_comm(mpi_comm):
     if mpi_comm is not None:
         raise TypeError(MPI_REMOVED_MESSAGE)
 
+#: Named initialisers for the latent space X. 'PCA' is the default.
+#: 'rand' and 'random' are synonyms. 'PCA_concat' and 'PCA_single' apply to MRD
+#: layers only (PCA of concatenated views, or one block of dimensions per view).
+INITIALISERS = ('PCA', 'bgplvm', 'randomProjection', 'rand', 'random')
+MRD_INITIALISERS = ('PCA_concat', 'PCA_single')
+
+
+def validate_init(init, mrd=False):
+    """Return ``init`` if it is a known initialiser name, else raise ValueError."""
+    allowed = INITIALISERS + (MRD_INITIALISERS if mrd else ())
+    if init not in allowed:
+        raise ValueError("Unknown initialiser %r; choose from %s" % (init, ', '.join(allowed)))
+    return init
+
+
 def initialize_latent(init, datanum, input_dim, Y):
     Xr = np.random.randn(datanum, input_dim)
     if init == 'PCA':
