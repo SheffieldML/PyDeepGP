@@ -30,7 +30,8 @@ class SparseGPLayer(SparseGP):
                  mpi_root=0,
                  auto_update=True,
                  psi_chunk_size=None,
-                 psi_threads=1):
+                 psi_threads=1,
+                 sparse_linalg='stable'):
         reject_mpi_comm(mpi_comm)
         self.psi_chunk_size = psi_chunk_size
         self.psi_threads = 1 if psi_threads is None else int(psi_threads)
@@ -41,11 +42,12 @@ class SparseGPLayer(SparseGP):
 
         if inference_method is None:
             from ..inference import VarDTC
-            inference_method = VarDTC(psi_chunk_size=psi_chunk_size, psi_threads=self.psi_threads)
+            inference_method = VarDTC(psi_chunk_size=psi_chunk_size, psi_threads=self.psi_threads,
+                                      sparse_linalg=sparse_linalg)
         elif inference_method=='inferentia':
-            from ..inference import VarDTC_Inferentia
-            inference_method = VarDTC_Inferentia()
-            self.psicov = True
+            raise NotImplementedError(
+                "inference_method='inferentia' is not shipped in this repository; "
+                "use the default VarDTC (or 'svi').")
         elif inference_method=='svi':
             from ..inference import SVI_VarDTC
             inference_method = SVI_VarDTC(psi_chunk_size=psi_chunk_size, psi_threads=self.psi_threads)
