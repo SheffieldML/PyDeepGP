@@ -26,6 +26,15 @@ class ModelTest(unittest.TestCase):
         self.assertTrue(m.layers[0].residual)
         self.assertTrue(m.checkgrad(tolerance=1e-3))
 
+    def test_chi_sets_hidden_kernel_variance(self):
+        X, Y = _data(12)
+        m = DoublyStochasticDeepGP([1, 1, 1, 1], Y, X, num_inducing=4, chi=1.0)
+        v = [float(l.kern.variance.values[0]) for l in m.layers]
+        self.assertEqual(v, [0.5, 0.5, 1.0])
+        m1 = DoublyStochasticDeepGP([1, 1], Y, X, num_inducing=4, chi=1.0)
+        self.assertEqual(float(m1.layers[0].kern.variance.values[0]), 1.0)
+        self.assertTrue(m.checkgrad(tolerance=1e-3))
+
     def test_checkgrad_minibatch(self):
         X, Y = _data(12)
         m = DoublyStochasticDeepGP([1, 2, 1], Y, X, num_inducing=4, seed=3)

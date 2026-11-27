@@ -133,3 +133,40 @@ V8, 3000 iterations, batch 256, seeds 0 to 2 (test RMSE / NLL):
 
 The gate is met on every seed, and the spread across seeds is about 0.01 in RMSE. A third layer
 does not improve on two on this task. GPc-style initialisation (chi = 1/L) is not yet tried.
+
+### 2026-11-27 (tuning slice 2: chi initialisation and a converged collapsed baseline)
+
+`DoublyStochasticDeepGP(..., chi=c)` (also through `DeepGP(..., inference_method='doubly_stochastic')`)
+starts hidden-layer kernels at variance `c/(L-1)`, GPc's CIP-0035 default scale. One test covers it.
+The collapsed baseline in `examples/compare_collapsed_vs_doubly_stochastic.py` now restarts L-BFGS in
+blocks of 1000 iterations, up to 5000, until the bound stops improving by 0.1%.
+
+V8, `chi=1`, 3000 iterations, seeds 0 to 2 (test RMSE / NLL):
+
+| L | seed 0 | seed 1 | seed 2 |
+|---|--------|--------|--------|
+| 2 | 0.204 / -0.193 | 0.212 / -0.180 | 0.207 / -0.192 |
+| 3 | 0.235 / -0.091 | 0.215 / -0.151 | 0.199 / -0.185 |
+
+At L=2, `chi/(L-1) = 1` is already our default, so the L=2 rows reproduce the earlier ones exactly.
+At L=3 the hidden variance halves. It is worse on seed 0, better on seed 2, and the seed spread
+(0.199 to 0.235) is larger than before (0.207 to 0.218). We see no benefit from `chi=1` on this task,
+so the default stays `chi=None` (kernel variance 1).
+
+Oil (`[12, 5, 2]`, M=30), seeds 0 to 2: leave-one-out 1-NN error / reconstruction RMSE.
+
+| model | seed 0 | seed 1 | seed 2 |
+|-------|--------|--------|--------|
+| collapsed | 0.28 / 1.002 | 0.32 / 0.788 | 0.27 / 0.649 |
+| doubly stochastic | 0.03 / 0.197 | 0.03 / 0.184 | 0.03 / 0.192 |
+| + natgrad (0.1) | 0.03 / 0.178 | 0.03 / 0.172 | 0.03 / 0.182 |
+
+CMU subject 35 walk, held-out RMSE, seed 0: collapsed 0.429, doubly stochastic 0.281, with natgrad
+0.265; predicting the mean of the training frames gives 0.950.
+
+Caveats. All hidden-layer `chi` settings here are no-ops for the two-layer oil and CMU stacks
+(`chi/(L-1)=1`), so the `+ chi=1` variant equals `+ natgrad` and is not shown. The collapsed oil
+model reaches a reconstruction RMSE near 1.0 on seed 0 (the level of predicting the mean), which
+points to a poor local optimum; five thousand iterations from one initialisation per seed does not
+rule out a better collapsed fit from other initialisations or noise settings. The oil and CMU
+comparisons are three seeds and one seed respectively.

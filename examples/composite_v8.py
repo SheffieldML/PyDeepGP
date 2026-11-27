@@ -6,7 +6,7 @@ GPc's JAX prototype and ``validation/gpc_vs_mlp.py`` (N=2000 train, 1000 test).
 GPc's V8 gate is a three-layer inducing-point model with test RMSE <= 0.26 and
 NLL <= 0 that beats the one-layer model; the prototype reached 0.229 / -0.25.
 
-    python examples/composite_v8.py [iters] [seeds]
+    python examples/composite_v8.py [iters] [seeds] [chi]
 """
 import sys
 import time
@@ -37,22 +37,23 @@ def evaluate(model, Xt, yt, n_samples=50):
     return rmse, nll
 
 
-def run(L, M=64, hidden=5, iters=3000, seed=0, natgrad_gamma=0., batch=256):
+def run(L, M=64, hidden=5, iters=3000, seed=0, natgrad_gamma=0., batch=256, chi=None):
     X, y, Xt, yt = task()
     nDims = [1] + [hidden] * (L - 1) + [10]
     m = deepgp.DeepGP(nDims, y, X, num_inducing=M, inference_method='doubly_stochastic',
-                      seed=seed, noise_var=0.1)
+                      seed=seed, noise_var=0.1, chi=chi)
     t0 = time.time()
     m.fit_minibatch(steps=iters, batch_size=batch, lr=0.01, seed=seed, natgrad_gamma=natgrad_gamma)
     sec = time.time() - t0
     m.set_batch(None)
     rmse, nll = evaluate(m, Xt, yt)
-    return dict(L=L, M=M, rmse=rmse, nll=nll, elbo_per_n=m.log_likelihood() / len(X), sec=sec)
+    return dict(L=L, M=M, chi=chi, rmse=rmse, nll=nll, elbo_per_n=m.log_likelihood() / len(X), sec=sec)
 
 
 if __name__ == '__main__':
     iters = int(sys.argv[1]) if len(sys.argv) > 1 else 3000
     seeds = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-    for L in (1, 2, 3):
+    chi = float(sys.argv[3]) if len(sys.argv) > 3 else None
+    for L in (2, 3) if chi is not None else (1, 2, 3):
         for s in range(seeds):
-            print(run(L, iters=iters, seed=s), flush=True)
+            print(run(L, iters=iters, seed=s, chi=chi), flush=True)
