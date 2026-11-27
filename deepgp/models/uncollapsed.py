@@ -143,7 +143,7 @@ class DoublyStochasticDeepGP(Model):
 
     # --- GPy model interface ---------------------------------------------
     def parameters_changed(self):
-        if not hasattr(self, 'eps'):
+        if not hasattr(self, 'eps') or getattr(self, '_defer_update', False):
             return
         Y = self.Y_all[self.idx]
         layers = [l.as_dict() for l in self.layers]
@@ -199,6 +199,7 @@ class DoublyStochasticDeepGP(Model):
                     top.q_mu.values, top.q_chol, self._natgrad['g_m'], self._natgrad['g_S'],
                     natgrad_gamma)
                 new_flat = choleskies.triang_to_flat(new_chol)
+            self._defer_update = True       # the bound is recomputed at the next resample
             m = beta1 * m + (1 - beta1) * obj_grad
             v = beta2 * v + (1 - beta2) * obj_grad ** 2
             theta = theta - lr * (m / (1 - beta1 ** t)) / (np.sqrt(v / (1 - beta2 ** t)) + 1e-8)
@@ -207,6 +208,7 @@ class DoublyStochasticDeepGP(Model):
                 top.q_mu[:] = new_mu
                 top.q_chol_flat[:] = new_flat
                 theta = self.optimizer_array.copy()
+            self._defer_update = False
             history.append(self._log_marginal_likelihood)
             if callback is not None:
                 callback(t, history[-1])
