@@ -170,3 +170,48 @@ model reaches a reconstruction RMSE near 1.0 on seed 0 (the level of predicting 
 points to a poor local optimum; five thousand iterations from one initialisation per seed does not
 rule out a better collapsed fit from other initialisations or noise settings. The oil and CMU
 comparisons are three seeds and one seed respectively.
+
+### 2026-11-27 (tuning slice 3: several collapsed initialisations)
+
+The collapsed baseline now trains four initialisations per seed (seed offset 0 or 1000, initial noise
+0.01 or 0.1 of the output variance; each converged as in slice 2) and keeps the one with the highest
+variational bound, never the best metric. All four are printed. Two-layer `chi` is a no-op, so that
+variant is dropped from the script.
+
+Oil, seeds 0 to 2. Per initialisation: bound, leave-one-out 1-NN error, reconstruction RMSE.
+
+| seed | init (offset, noise) | bound | 1-NN | RMSE |
+|------|------|-------|------|------|
+| 0 | 0, 0.01 | -879.9 | 0.28 | 1.002 |
+| 0 | 1000, 0.01 | -916.2 | 0.20 | 1.001 |
+| 0 | 0, 0.1 | **-846.6** | 0.53 | 1.003 |
+| 0 | 1000, 0.1 | -882.5 | 0.38 | 1.002 |
+| 1 | 0, 0.01 | -972.7 | 0.32 | 0.788 |
+| 1 | 1000, 0.01 | -865.6 | 0.05 | 1.004 |
+| 1 | 0, 0.1 | -968.9 | 0.41 | 0.800 |
+| 1 | 1000, 0.1 | **-843.0** | 0.40 | 1.003 |
+| 2 | 0, 0.01 | **-862.0** | 0.27 | 0.649 |
+| 2 | 1000, 0.01 | -890.2 | 0.40 | 1.002 |
+| 2 | 0, 0.1 | -869.4 | 0.31 | 0.663 |
+| 2 | 1000, 0.1 | -945.0 | 0.01 | 0.483 |
+
+Best by bound (bold) against the doubly stochastic model (1-NN / RMSE):
+
+| seed | collapsed, best bound | doubly stochastic | + natgrad |
+|------|------|------|------|
+| 0 | 0.53 / 1.003 | 0.03 / 0.197 | 0.03 / 0.178 |
+| 1 | 0.40 / 1.003 | 0.03 / 0.184 | 0.03 / 0.172 |
+| 2 | 0.27 / 0.649 | 0.03 / 0.192 | 0.03 / 0.182 |
+
+CMU walk, seed 0, held-out RMSE per collapsed initialisation: 0.429, 0.307, 0.390, 0.499 (bounds
+-4309, -4252, -4239, -4293). Best by bound: 0.390. Doubly stochastic 0.281; with natgrad 0.265; mean
+of training frames 0.950.
+
+Findings. Extra initialisations do not close the oil gap. Even the best collapsed run by any metric
+(seed 2, init 4: 1-NN 0.01, RMSE 0.483) reconstructs much worse than the doubly stochastic model
+(0.18 to 0.20), and most collapsed runs reconstruct at the level of the data mean (RMSE about 1.0).
+The bound does not rank the collapsed runs by quality: the highest bound picked the worst
+reconstruction on seeds 0 and 1. On CMU the best collapsed initialisation (0.307) comes closer to the
+doubly stochastic result (0.281) but still does not match it. The optimiser and initialisation
+choices are one family (PCA start, default kernels, L-BFGS); a collapsed model tuned by the original
+DeepGP recipe (staged layer training, fixed noise early) could do better, and we have not tried that.
