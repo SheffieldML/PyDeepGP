@@ -115,3 +115,103 @@ The gate (L=3: RMSE <= 0.26, NLL <= 0, beats one layer) is met. GPc's RBF number
 **CMU** subject 35 walk 01 (358 frames, 62-D; train on even frames, predict odd frames from interpolated top latents, `[62, 5, 3]`, M=25; held-out RMSE on standardised data, predicting the mean gives 0.95): collapsed 0.438, doubly stochastic 0.281, with natgrad 0.265.
 
 Caveats: single seeds; the collapsed model used the repository's example initialisation and is probably under-tuned (seed 1 landed in a poor optimum), so these runs do not show that doubly stochastic inference is better in general, only that it trains reliably here. Wall time is much longer for the doubly stochastic runs (100-870 s versus 8-225 s) because it is pure NumPy with per-sample Python loops. The CMU metric tests latent smoothness, not dynamics.
+
+### 2026-11-27 (tuning slice 1: speed and seeds)
+
+`fit_minibatch` recomputed the bound after every parameter write; it now defers that to the next
+`resample`. A step is about 1.8x faster (profile: 0.97 s to 0.53 s for 20 steps, N=1000, M=64, two
+layers), and `fit_minibatch` results are unchanged in kind (123 tests pass). The remaining cost is
+mostly GPy kernel gradient routing, so a further gain needs batched kernel calls.
+
+V8, 3000 iterations, batch 256, seeds 0 to 2 (test RMSE / NLL):
+
+| L | seed 0 | seed 1 | seed 2 | seconds per run |
+|---|--------|--------|--------|-----------------|
+| 1 | 0.772 / 1.151 | 0.766 / 1.144 | 0.766 / 1.144 | 40 to 48 |
+| 2 | 0.204 / -0.193 | 0.212 / -0.180 | 0.207 / -0.192 | 50 to 102 |
+| 3 | 0.207 / -0.188 | 0.210 / -0.190 | 0.218 / -0.159 | 120 to 172 |
+
+The gate is met on every seed, and the spread across seeds is about 0.01 in RMSE. A third layer
+does not improve on two on this task. GPc-style initialisation (chi = 1/L) is not yet tried.
+
+### 2026-11-27 (tuning slice 2: chi initialisation and a converged collapsed baseline)
+
+`DoublyStochasticDeepGP(..., chi=c)` (also through `DeepGP(..., inference_method='doubly_stochastic')`)
+starts hidden-layer kernels at variance `c/(L-1)`, GPc's CIP-0035 default scale. One test covers it.
+The collapsed baseline in `examples/compare_collapsed_vs_doubly_stochastic.py` now restarts L-BFGS in
+blocks of 1000 iterations, up to 5000, until the bound stops improving by 0.1%.
+
+V8, `chi=1`, 3000 iterations, seeds 0 to 2 (test RMSE / NLL):
+
+| L | seed 0 | seed 1 | seed 2 |
+|---|--------|--------|--------|
+| 2 | 0.204 / -0.193 | 0.212 / -0.180 | 0.207 / -0.192 |
+| 3 | 0.235 / -0.091 | 0.215 / -0.151 | 0.199 / -0.185 |
+
+At L=2, `chi/(L-1) = 1` is already our default, so the L=2 rows reproduce the earlier ones exactly.
+At L=3 the hidden variance halves. It is worse on seed 0, better on seed 2, and the seed spread
+(0.199 to 0.235) is larger than before (0.207 to 0.218). We see no benefit from `chi=1` on this task,
+so the default stays `chi=None` (kernel variance 1).
+
+Oil (`[12, 5, 2]`, M=30), seeds 0 to 2: leave-one-out 1-NN error / reconstruction RMSE.
+
+| model | seed 0 | seed 1 | seed 2 |
+|-------|--------|--------|--------|
+| collapsed | 0.28 / 1.002 | 0.32 / 0.788 | 0.27 / 0.649 |
+| doubly stochastic | 0.03 / 0.197 | 0.03 / 0.184 | 0.03 / 0.192 |
+| + natgrad (0.1) | 0.03 / 0.178 | 0.03 / 0.172 | 0.03 / 0.182 |
+
+CMU subject 35 walk, held-out RMSE, seed 0: collapsed 0.429, doubly stochastic 0.281, with natgrad
+0.265; predicting the mean of the training frames gives 0.950.
+
+Caveats. All hidden-layer `chi` settings here are no-ops for the two-layer oil and CMU stacks
+(`chi/(L-1)=1`), so the `+ chi=1` variant equals `+ natgrad` and is not shown. The collapsed oil
+model reaches a reconstruction RMSE near 1.0 on seed 0 (the level of predicting the mean), which
+points to a poor local optimum; five thousand iterations from one initialisation per seed does not
+rule out a better collapsed fit from other initialisations or noise settings. The oil and CMU
+comparisons are three seeds and one seed respectively.
+
+### 2026-11-27 (tuning slice 3: several collapsed initialisations)
+
+The collapsed baseline now trains four initialisations per seed (seed offset 0 or 1000, initial noise
+0.01 or 0.1 of the output variance; each converged as in slice 2) and keeps the one with the highest
+variational bound, never the best metric. All four are printed. Two-layer `chi` is a no-op, so that
+variant is dropped from the script.
+
+Oil, seeds 0 to 2. Per initialisation: bound, leave-one-out 1-NN error, reconstruction RMSE.
+
+| seed | init (offset, noise) | bound | 1-NN | RMSE |
+|------|------|-------|------|------|
+| 0 | 0, 0.01 | -879.9 | 0.28 | 1.002 |
+| 0 | 1000, 0.01 | -916.2 | 0.20 | 1.001 |
+| 0 | 0, 0.1 | **-846.6** | 0.53 | 1.003 |
+| 0 | 1000, 0.1 | -882.5 | 0.38 | 1.002 |
+| 1 | 0, 0.01 | -972.7 | 0.32 | 0.788 |
+| 1 | 1000, 0.01 | -865.6 | 0.05 | 1.004 |
+| 1 | 0, 0.1 | -968.9 | 0.41 | 0.800 |
+| 1 | 1000, 0.1 | **-843.0** | 0.40 | 1.003 |
+| 2 | 0, 0.01 | **-862.0** | 0.27 | 0.649 |
+| 2 | 1000, 0.01 | -890.2 | 0.40 | 1.002 |
+| 2 | 0, 0.1 | -869.4 | 0.31 | 0.663 |
+| 2 | 1000, 0.1 | -945.0 | 0.01 | 0.483 |
+
+Best by bound (bold) against the doubly stochastic model (1-NN / RMSE):
+
+| seed | collapsed, best bound | doubly stochastic | + natgrad |
+|------|------|------|------|
+| 0 | 0.53 / 1.003 | 0.03 / 0.197 | 0.03 / 0.178 |
+| 1 | 0.40 / 1.003 | 0.03 / 0.184 | 0.03 / 0.172 |
+| 2 | 0.27 / 0.649 | 0.03 / 0.192 | 0.03 / 0.182 |
+
+CMU walk, seed 0, held-out RMSE per collapsed initialisation: 0.429, 0.307, 0.390, 0.499 (bounds
+-4309, -4252, -4239, -4293). Best by bound: 0.390. Doubly stochastic 0.281; with natgrad 0.265; mean
+of training frames 0.950.
+
+Findings. Extra initialisations do not close the oil gap. Even the best collapsed run by any metric
+(seed 2, init 4: 1-NN 0.01, RMSE 0.483) reconstructs much worse than the doubly stochastic model
+(0.18 to 0.20), and most collapsed runs reconstruct at the level of the data mean (RMSE about 1.0).
+The bound does not rank the collapsed runs by quality: the highest bound picked the worst
+reconstruction on seeds 0 and 1. On CMU the best collapsed initialisation (0.307) comes closer to the
+doubly stochastic result (0.281) but still does not match it. The optimiser and initialisation
+choices are one family (PCA start, default kernels, L-BFGS); a collapsed model tuned by the original
+DeepGP recipe (staged layer training, fixed noise early) could do better, and we have not tried that.

@@ -33,25 +33,56 @@ def loo_1nn_error(X, labels):
     return float(np.mean(labels[D.argmin(1)] != labels))
 
 
-def collapsed(Y, nDims, M, iters, seed):
+def collapsed_once(Y, nDims, M, iters, seed, noise_factor):
     np.random.seed(seed)
     m = deepgp.DeepGP(nDims, Y, num_inducing=M)
     for i, layer in enumerate(m.layers):
         out_var = layer.Y.var() if i == 0 else layer.Y.mean.var()
-        layer.Gaussian_noise.variance = out_var * 0.01
+        layer.Gaussian_noise.variance = out_var * noise_factor
+    # Restart L-BFGS until it stops improving the bound (or the iteration budget is spent), so the
+    # baseline is converged rather than cut off by a single call.
+    best, used = -np.inf, 0
+    while used < iters:
+        m.optimize(max_iters=min(1000, iters - used), messages=False)
+        used += 1000
+        if m.log_likelihood() < best + 1e-3 * abs(best):
+            break
+        best = m.log_likelihood()
+    m.iters_used = min(used, iters)
+    return m
+
+
+INITS = [(0, 0.01), (1000, 0.01), (0, 0.1), (1000, 0.1)]     # (seed offset, noise / output variance)
+
+
+def collapsed(Y, nDims, M, iters, seed, inits=INITS):
+    """Best of several initialisations, chosen by the variational bound (never by the metric).
+
+    ``m.all_bounds`` lists the bound of every initialisation.
+    """
     t0 = time.time()
-    m.optimize(max_iters=iters, messages=False)
+    models = [collapsed_once(Y, nDims, M, iters, seed + off, nf) for off, nf in inits]
+    bounds = [m.log_likelihood() for m in models]
+    m = models[int(np.argmax(bounds))]
+    m.all_bounds, m.all_models = bounds, models
     return m, time.time() - t0
 
 
-def doubly_stochastic(Y, nDims, M, iters, seed, natgrad_gamma=0.):
+def doubly_stochastic(Y, nDims, M, iters, seed, natgrad_gamma=0., chi=None):
     m = deepgp.DeepGP(nDims, Y, num_inducing=M, inference_method='doubly_stochastic',
-                      seed=seed, noise_var=0.05, n_samples=1)
+                      seed=seed, noise_var=0.05, n_samples=1, chi=chi)
     t0 = time.time()
     m.fit_minibatch(steps=iters, batch_size=min(len(Y), 128), lr=0.01, seed=seed,
                     natgrad_gamma=natgrad_gamma)
     m.set_batch(None)
     return m, time.time() - t0
+
+
+VARIANTS = [(0., None), (0.1, None)]      # chi is a no-op for two-layer stacks
+
+
+def label(gamma, chi):
+    return 'doubly stochastic' + (' + natgrad' if gamma else '') + (' + chi=%g' % chi if chi else '')
 
 
 def top_latent(m):
@@ -66,12 +97,16 @@ def oil(seed=0, iters=(5000, 3000)):
     nDims, M = [Y.shape[1], 5, 2], 30
     rows = []
     mc, tc = collapsed(Y, nDims, M, iters[0], seed)
-    rows.append(('collapsed', loo_1nn_error(top_latent(mc), labels),
+    rows.append(('collapsed (%d iters)' % mc.iters_used, loo_1nn_error(top_latent(mc), labels),
                  float(np.sqrt(np.mean((mc.predict(top_latent(mc))[0] - Y) ** 2))), tc))
-    for gamma in (0., 0.1):
-        md, td = doubly_stochastic(Y, nDims, M, iters[1], seed, natgrad_gamma=gamma)
+    for k, mk in enumerate(mc.all_models):
+        print('  collapsed init %s: bound %.1f, 1-NN %.2f, RMSE %.3f' % (
+            INITS[k], mc.all_bounds[k], loo_1nn_error(top_latent(mk), labels),
+            float(np.sqrt(np.mean((mk.predict(top_latent(mk))[0] - Y) ** 2)))), flush=True)
+    for gamma, chi in VARIANTS:
+        md, td = doubly_stochastic(Y, nDims, M, iters[1], seed, natgrad_gamma=gamma, chi=chi)
         mean, _ = md.predict(top_latent(md), n_samples=20, seed=0)
-        rows.append(('doubly stochastic' + (' + natgrad' if gamma else ''),
+        rows.append((label(gamma, chi),
                      loo_1nn_error(top_latent(md), labels),
                      float(np.sqrt(np.mean((mean - Y) ** 2))), td))
     return rows
@@ -93,11 +128,15 @@ def cmu(seed=0, iters=(5000, 3000)):
 
     mc, tc = collapsed(train, nDims, M, iters[0], seed)
     Xc = top_latent(mc)
-    rows.append(('collapsed', held_out(mc, Xc, lambda X: mc.predict(X)[0]), tc))
-    for gamma in (0., 0.1):
-        md, td = doubly_stochastic(train, nDims, M, iters[1], seed, natgrad_gamma=gamma)
+    rows.append(('collapsed (%d iters)' % mc.iters_used, held_out(mc, Xc, lambda X: mc.predict(X)[0]), tc))
+    for k, mk in enumerate(mc.all_models):
+        print('  collapsed init %s: bound %.1f, held-out RMSE %.3f' % (
+            INITS[k], mc.all_bounds[k], held_out(mk, top_latent(mk), lambda X: mk.predict(X)[0])),
+            flush=True)
+    for gamma, chi in VARIANTS:
+        md, td = doubly_stochastic(train, nDims, M, iters[1], seed, natgrad_gamma=gamma, chi=chi)
         Xd = top_latent(md)
-        rows.append(('doubly stochastic' + (' + natgrad' if gamma else ''),
+        rows.append((label(gamma, chi),
                      held_out(md, Xd, lambda X: md.predict(X, n_samples=20, seed=0)[0]), td))
     rows.append(('mean of train frames', float(np.sqrt(np.mean(test ** 2))), 0.))
     return rows

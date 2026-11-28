@@ -62,11 +62,14 @@ class DoublyStochasticDeepGP(Model):
     :param n_samples: Monte Carlo samples per evaluation.
     :param batch_size: default minibatch size for :meth:`fit_minibatch` (``None`` = all).
     :param seed: seed of the model's random generator.
+    :param chi: if given (and ``kernels`` is not), hidden-layer kernels start with variance
+        ``chi / (L - 1)``, the GPc CIP-0035 default scale (``chi = 1``) that keeps the prior
+        end-to-end Jacobian well conditioned with identity means.
     """
 
     def __init__(self, nDims, Y, X=None, num_inducing=20, kernels=None, noise_var=0.1,
                  n_samples=1, residual=True, batch_size=None, seed=0, jitter=1e-6,
-                 q_sqrt_hidden=1e-2, q_sqrt_x=0.5, name='doubly_stochastic_deepgp'):
+                 q_sqrt_hidden=1e-2, q_sqrt_x=0.5, chi=None, name='doubly_stochastic_deepgp'):
         super(DoublyStochasticDeepGP, self).__init__(name=name)
         dims = list(nDims)[::-1]                       # input side first
         self.Y_all = np.asarray(Y, float)
@@ -109,6 +112,8 @@ class DoublyStochasticDeepGP(Model):
             M = num_inducing if np.isscalar(num_inducing) else num_inducing[i]
             M = min(M, self.N)
             kern = kernels[i] if kernels is not None else GPy.kern.RBF(Q, ARD=True)
+            if kernels is None and chi is not None and i < L - 1:
+                kern.variance = float(chi) / (L - 1)
             Z = H[i][self.rng.permutation(self.N)[:M]].copy()
             hidden = i < L - 1
             s = q_sqrt_hidden if hidden else 1.
@@ -143,7 +148,7 @@ class DoublyStochasticDeepGP(Model):
 
     # --- GPy model interface ---------------------------------------------
     def parameters_changed(self):
-        if not hasattr(self, 'eps'):
+        if not hasattr(self, 'eps') or getattr(self, '_defer_update', False):
             return
         Y = self.Y_all[self.idx]
         layers = [l.as_dict() for l in self.layers]
@@ -199,6 +204,7 @@ class DoublyStochasticDeepGP(Model):
                     top.q_mu.values, top.q_chol, self._natgrad['g_m'], self._natgrad['g_S'],
                     natgrad_gamma)
                 new_flat = choleskies.triang_to_flat(new_chol)
+            self._defer_update = True       # the bound is recomputed at the next resample
             m = beta1 * m + (1 - beta1) * obj_grad
             v = beta2 * v + (1 - beta2) * obj_grad ** 2
             theta = theta - lr * (m / (1 - beta1 ** t)) / (np.sqrt(v / (1 - beta2 ** t)) + 1e-8)
@@ -207,6 +213,7 @@ class DoublyStochasticDeepGP(Model):
                 top.q_mu[:] = new_mu
                 top.q_chol_flat[:] = new_flat
                 theta = self.optimizer_array.copy()
+            self._defer_update = False
             history.append(self._log_marginal_likelihood)
             if callback is not None:
                 callback(t, history[-1])
