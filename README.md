@@ -112,6 +112,15 @@ layer natural-gradient steps (``fit_minibatch(..., natgrad_gamma=0.1)``)::
     m.fit_minibatch(steps=500, batch_size=50)    # fresh batch and samples each step
     mean, var = m.predict(Xnew)
 
+Unsupervised models take ``back_constraint=True`` (an MLP encoder gives the means of
+``q(X)``, as in the collapsed model, initialised near the PCA solution; variances stay free per
+point). Multiple views (MRD) pass ``Y`` as a list and ``nDims[0]`` as the list of view widths,
+for example ``DeepGP([[6, 5], 2, 3], [A, B], inference_method='doubly_stochastic')``: the
+hidden layers are a shared trunk and each view has its own output layer, kernel and noise. With
+back constraints the per-view encoders combine by product of experts. ``predict``,
+``predict_y`` and ``log_predictive_density`` take ``view=``. MRD supports the Gaussian
+likelihood only; see ``examples/mrd_doubly_stochastic.py``.
+
 Psi chunking (optional)
 -----------------------
 

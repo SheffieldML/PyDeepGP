@@ -228,3 +228,22 @@ L=2 Monte Carlo ELBOs agree within 4 combined standard errors. GPc's probit has 
 Not shipped: softmax, robust-max, ordered, binomial, and learning likelihood parameters (probit bias,
 Student-t scale and degrees of freedom). Finding for the interchange work: the installed GPc extension
 was stale; its `.model` stream did not carry the likelihood until GPc was rebuilt from current source.
+
+### Back constraints and MRD (slice 5)
+
+`DoublyStochasticDeepGP(..., back_constraint=True)` replaces the free means of `q(X)` with MLP
+encoders (pretrained to the PCA initialisation); variances stay free per point. `Y` as a list gives
+MRD: a shared trunk and one whitened head per view (kernel, `q(u)`, noise). With several views and
+encoders, `q(X)` is the product of experts of the per-view Gaussians, reusing `aggregate_qx`. The
+bound core takes `views=` (a single view reproduces the old result exactly). Gradient checks pass for
+free and back-constrained q(X), one and two views, minibatches, and a shared trunk; natural gradients
+apply to every head.
+
+`examples/mrd_doubly_stochastic.py` (one seed, shared plus one private factor per view): the
+back-constrained run recovers the three factors as separate latent dimensions (correlations
+0.98 to 1.0), and view B relies on the shared and its own private dimension (private A relevance
+0.03). View A's ARD relevance is not as clean (0.33, 0.45, 0.23), and the free-q(X) run mixes the
+factors. One seed only, so no claim about the factorisation yet.
+
+Not done: non-Gaussian MRD, learned per-view q(X) without an encoder, encoder-predicted variances,
+per-layer back constraints in a deeper stack.

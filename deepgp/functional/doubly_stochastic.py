@@ -36,7 +36,7 @@ def _check_layers(layers, X):
 
 
 def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1., kl_scale=1.,
-                           x_var=None, eps_x=None, likelihood=None):
+                           x_var=None, eps_x=None, likelihood=None, views=None):
     """Bound and gradients for a stack of layers.
 
     :param eps: list over samples; each entry a list with one ``(N, width)`` standard
@@ -49,67 +49,92 @@ def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1.,
         Gaussian with ``noise_var`` (analytic, and ``grads['noise_var']`` is returned). With a
         likelihood object its expectations replace the Gaussian data term and ``noise_var`` is
         ignored (``grads['noise_var']`` is ``0.``).
+    :param views: multiple output views (MRD). A list of ``dict(layer=..., Y=..., noise_var=...,
+        likelihood=None)``, one whitened head per view. Then ``layers`` is the *shared trunk* only
+        (possibly empty), ``eps`` has one array per trunk layer, and ``Y``, ``noise_var`` and
+        ``likelihood`` are ignored. Every head reads the trunk output; the bound sums the views.
     :returns: ``(bound, grads)`` where ``grads`` has ``layers`` (list of dicts with
-        ``q_mu``, ``q_chol``, ``kern``, ``Z``), ``noise_var``, ``X``, ``x_var`` (``0.`` unless given) and ``natgrad`` (``g_m (M, P)`` and ``g_S (P, M, M)``: gradients of the
-        expected log likelihood, without the KL, with respect to the top layer's ``m`` and ``S``;
-        see :func:`whitened_natgrad_step`).
+        ``q_mu``, ``q_chol``, ``kern``, ``Z``: the trunk, then the heads when ``views`` is given),
+        ``noise_var`` (a list over views when ``views`` is given), ``X``, ``x_var`` (``0.`` unless
+        given) and ``natgrad`` (``g_m (M, P)`` and ``g_S (P, M, M)``: gradients of the expected log
+        likelihood, without the KL, with respect to the top layer's ``m`` and ``S``; see
+        :func:`whitened_natgrad_step`). With ``views`` it is a list, one entry per head.
     """
-    L = len(layers)
-    out_width = _check_layers(layers, X)
-    if Y.shape[1] != out_width:
-        raise ValueError("Y has %d columns but the top layer has %d outputs" % (Y.shape[1], out_width))
+    multi = views is not None
+    if multi:
+        trunk = list(layers)
+        heads = [dict(v) for v in views]
+        for v in heads:
+            v.setdefault('likelihood', None)
+    else:
+        trunk = list(layers[:-1])
+        heads = [dict(layer=layers[-1], Y=Y, noise_var=noise_var, likelihood=likelihood)]
+    T = len(trunk)
+    width = _check_layers(trunk, X)
+    for v in heads:
+        if v['Y'].shape[1] != v['layer']['q_mu'].shape[1]:
+            raise ValueError("Y has %d columns but the head has %d outputs"
+                             % (v['Y'].shape[1], v['layer']['q_mu'].shape[1]))
     N = X.shape[0]
     S = len(eps)
-    layer_grads = [dict(q_mu=0., q_chol=0., kern=0., Z=0.) for _ in range(L)]
-    gX, g_noise, ell, g_xvar = 0., 0., 0., 0.
+    all_layers = trunk + [v['layer'] for v in heads]
+    layer_grads = [dict(q_mu=0., q_chol=0., kern=0., Z=0.) for _ in all_layers]
+    gX, ell, g_xvar = 0., 0., 0.
+    g_noise = [0. for _ in heads]
     if x_var is not None and (eps_x is None or len(eps_x) != len(eps)):
         raise ValueError("x_var needs one eps_x array per sample")
-    nat_m, nat_S = 0., 0.
+    nat = [[0., 0.] for _ in heads]
 
     for s_idx, sample in enumerate(eps):
-        if len(sample) != L - 1:
-            raise ValueError("each sample needs %d eps arrays, got %d" % (L - 1, len(sample)))
+        if len(sample) != T:
+            raise ValueError("each sample needs %d eps arrays, got %d" % (T, len(sample)))
         inputs, caches, variances = [], [], []
         h = X if x_var is None else reparam_sample(X, x_var, eps_x[s_idx])
-        for l, layer in enumerate(layers):
+        for l, layer in enumerate(trunk):
             inputs.append(h)
             mu, var, cache = whitened_marginals(layer['kern'], layer['Z'].copy(), h.copy(),
                                                 layer['q_mu'], layer['q_chol'], jitter)
             if layer.get('residual', False):
                 mu = mu + h
             caches.append(cache); variances.append(var)
-            if l < L - 1:
-                h = reparam_sample(mu, var, sample[l])
-        if likelihood is None:
-            resid = Y - mu
-            ell += scale * np.sum(-0.5 * np.log(2 * np.pi * noise_var) - 0.5 * (resid ** 2 + var) / noise_var)
-            g_noise += scale * np.sum(-0.5 / noise_var + 0.5 * (resid ** 2 + var) / noise_var ** 2)
-            g_mu = scale * resid / noise_var
-            g_var = -0.5 * scale / noise_var * np.ones_like(var)
-        else:
-            e, gm, gv = likelihood.variational_expectations(Y, mu, var)
-            ell += scale * np.sum(e)
-            g_mu, g_var = scale * gm, scale * gv
-        for l in range(L - 1, -1, -1):
-            layer = layers[l]
+            h = reparam_sample(mu, var, sample[l])
+        g_in = 0.
+        for k, v in enumerate(heads):
+            layer, Yv, nv, lik = v['layer'], v['Y'], v['noise_var'], v['likelihood']
+            mu, var, cache = whitened_marginals(layer['kern'], layer['Z'].copy(), h.copy(),
+                                                layer['q_mu'], layer['q_chol'], jitter)
+            if lik is None:
+                resid = Yv - mu
+                ell += scale * np.sum(-0.5 * np.log(2 * np.pi * nv) - 0.5 * (resid ** 2 + var) / nv)
+                g_noise[k] += scale * np.sum(-0.5 / nv + 0.5 * (resid ** 2 + var) / nv ** 2)
+                g_mu = scale * resid / nv
+                g_var = -0.5 * scale / nv * np.ones_like(var)
+            else:
+                e, gm, gv = lik.variational_expectations(Yv, mu, var)
+                ell += scale * np.sum(e)
+                g_mu, g_var = scale * gm, scale * gv
+            g = whitened_marginals_backward(layer['kern'], layer['Z'].copy(), h.copy(),
+                                            cache, g_mu, g_var)
+            for key in ('q_mu', 'q_chol', 'kern', 'Z'):
+                layer_grads[T + k][key] = layer_grads[T + k][key] + g[key] / S
+            gm_, gS_ = whitened_expectation_grads(cache, g_mu, g_var)
+            nat[k][0] = nat[k][0] + gm_ / S
+            nat[k][1] = nat[k][1] + gS_ / S
+            g_in = g_in + g['X']
+        for l in range(T - 1, -1, -1):
+            layer = trunk[l]
+            g_mu, g_var = reparam_sample_backward(variances[l], sample[l], g_in)
             g = whitened_marginals_backward(layer['kern'], layer['Z'].copy(), inputs[l].copy(),
                                             caches[l], g_mu, g_var)
-            for k in ('q_mu', 'q_chol', 'kern', 'Z'):
-                layer_grads[l][k] = layer_grads[l][k] + g[k] / S
-            if l == L - 1:
-                gm, gS = whitened_expectation_grads(caches[l], g_mu, g_var)
-                nat_m = nat_m + gm / S
-                nat_S = nat_S + gS / S
+            for key in ('q_mu', 'q_chol', 'kern', 'Z'):
+                layer_grads[l][key] = layer_grads[l][key] + g[key] / S
             g_in = g['X'] + (g_mu if layer.get('residual', False) else 0.)
-            if l > 0:
-                g_mu, g_var = reparam_sample_backward(variances[l - 1], sample[l - 1], g_in)
-            else:
-                gX = gX + g_in / S
-                if x_var is not None:
-                    g_xvar = g_xvar + reparam_sample_backward(x_var, eps_x[s_idx], g_in)[1] / S
+        gX = gX + g_in / S
+        if x_var is not None:
+            g_xvar = g_xvar + reparam_sample_backward(x_var, eps_x[s_idx], g_in)[1] / S
 
     kl = 0.
-    for l, layer in enumerate(layers):
+    for l, layer in enumerate(all_layers):
         k, dm, dL = whitened_kl(layer['q_mu'], layer['q_chol'])
         kl += k
         layer_grads[l]['q_mu'] = layer_grads[l]['q_mu'] - kl_scale * dm
@@ -121,5 +146,7 @@ def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1.,
         bound -= scale * kl_x
         gX = gX - scale * X
         g_xvar = g_xvar - scale * 0.5 * (1. - 1. / x_var)
-    return bound, dict(layers=layer_grads, noise_var=g_noise / S, X=gX, x_var=g_xvar,
-                       natgrad=dict(g_m=nat_m, g_S=nat_S))
+    nats = [dict(g_m=m_, g_S=S_) for m_, S_ in nat]
+    return bound, dict(layers=layer_grads, X=gX, x_var=g_xvar,
+                       noise_var=[g / S for g in g_noise] if multi else g_noise[0] / S,
+                       natgrad=nats if multi else nats[0])
