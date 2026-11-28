@@ -95,6 +95,35 @@ class TestGPcReference(unittest.TestCase):
     def test_three_layer_elbo_statistical(self):
         self._check_stochastic('three_layer')
 
+    # --- non-Gaussian top layers (GPc defaults: StudentT variance 1, 5 degrees of freedom) ---
+    def _lik(self, name, Y):
+        from deepgp.functional import likelihoods as lk
+        return dict(probit=lk.Probit.from_labels(np.asarray(Y)), poisson=lk.Poisson(),
+                    student_t=lk.StudentT(1., 5.))[name]
+
+    def _lcase(self, name):
+        return next(c for c in self.data['likelihood_cases'] if c['name'] == name)
+
+    def test_non_gaussian_one_layer_elbo_exact(self):
+        for lik in ('probit', 'poisson', 'student_t'):
+            case = self._lcase(lik + '_1')
+            layers, _ = _layers(case)
+            Y = np.array(case['Y'])
+            bound, _ = doubly_stochastic_bound(layers, self.X, Y, 1., self._eps(1, 1),
+                                               likelihood=self._lik(lik, case['Y']))
+            self.assertAlmostEqual(bound, case['elbo'], places=4, msg=lik)
+
+    def test_non_gaussian_two_layer_elbo_statistical(self):
+        for lik in ('probit', 'poisson', 'student_t'):
+            case = self._lcase(lik + '_2')
+            layers, _ = _layers(case)
+            Y = np.array(case['Y'])
+            vals = [doubly_stochastic_bound(layers, self.X, Y, 1., self._eps(2, 200, seed),
+                                            likelihood=self._lik(lik, case['Y']))[0] for seed in range(4)]
+            se = np.hypot(np.std(vals, ddof=1) / 2., case['elbo_stderr'])
+            self.assertLess(abs(np.mean(vals) - case['elbo_mean']), 4 * se + 1e-3,
+                            '%s: ours %.4f gpc %.4f (se %.4f)' % (lik, np.mean(vals), case['elbo_mean'], se))
+
     def test_layer_kl_all_cases(self):
         for case in self.data['cases']:
             layers, _ = _layers(case)

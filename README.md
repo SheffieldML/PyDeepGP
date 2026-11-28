@@ -98,7 +98,10 @@ Doubly stochastic inference (new)
 ``DeepGP(nDims, Y, X, inference_method='doubly_stochastic', ...)`` returns a
 ``DoublyStochasticDeepGP`` (Salimbeni and Deisenroth, 2017): a whitened ``q(u)``
 per layer, reparameterised samples through hidden layers, and a minibatch
-trainer. The likelihood is Gaussian, and the default collapsed ``DeepGP`` is
+trainer. The likelihood is Gaussian by default; ``likelihood=`` takes a
+``deepgp.functional.likelihoods`` object (``Probit``, ``Poisson``, ``StudentT``) with the
+top-layer expectation by 20-point Gauss-Hermite quadrature, matching GPc. Natural gradients
+need a log-concave likelihood, so ``StudentT`` is refused there. The default collapsed ``DeepGP`` is
 unchanged. Pass ``X=None`` for the unsupervised model, with a Gaussian ``q(X)``
 (``m.X_mean``, ``m.X_var``) initialised by PCA of ``Y``. Training can give the top
 layer natural-gradient steps (``fit_minibatch(..., natgrad_gamma=0.1)``)::

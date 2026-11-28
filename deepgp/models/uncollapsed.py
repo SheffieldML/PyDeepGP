@@ -23,6 +23,7 @@ from GPy.core.parameterization.transformations import Logexp
 from GPy.util import choleskies
 from GPy.util.pca import PCA
 
+from ..functional.likelihoods import Gaussian
 from ..functional import (doubly_stochastic_bound, whitened_marginals, reparam_sample,
                           whitened_natgrad_step)
 
@@ -62,6 +63,10 @@ class DoublyStochasticDeepGP(Model):
     :param n_samples: Monte Carlo samples per evaluation.
     :param batch_size: default minibatch size for :meth:`fit_minibatch` (``None`` = all).
     :param seed: seed of the model's random generator.
+    :param likelihood: a :mod:`deepgp.functional.likelihoods` object (``Probit``, ``Poisson``,
+        ``StudentT``, ...); ``None`` (default) is Gaussian with the learned ``noise_variance``.
+        A non-Gaussian likelihood has no ``noise_variance`` parameter and its own parameters
+        are fixed. :meth:`predict` then returns the latent ``f``; use :meth:`predict_y`.
     :param chi: if given (and ``kernels`` is not), hidden-layer kernels start with variance
         ``chi / (L - 1)``, the GPc CIP-0035 default scale (``chi = 1``) that keeps the prior
         end-to-end Jacobian well conditioned with identity means.
@@ -69,7 +74,7 @@ class DoublyStochasticDeepGP(Model):
 
     def __init__(self, nDims, Y, X=None, num_inducing=20, kernels=None, noise_var=0.1,
                  n_samples=1, residual=True, batch_size=None, seed=0, jitter=1e-6,
-                 q_sqrt_hidden=1e-2, q_sqrt_x=0.5, chi=None, name='doubly_stochastic_deepgp'):
+                 q_sqrt_hidden=1e-2, q_sqrt_x=0.5, chi=None, likelihood=None, name='doubly_stochastic_deepgp'):
         super(DoublyStochasticDeepGP, self).__init__(name=name)
         dims = list(nDims)[::-1]                       # input side first
         self.Y_all = np.asarray(Y, float)
@@ -121,12 +126,16 @@ class DoublyStochasticDeepGP(Model):
             self.layers.append(WhitenedLayer(kern, Z, np.zeros((M, P)), q_chol,
                                              residual=bool(residual and hidden and Q == P),
                                              name='layer_%d' % i))
-        self.noise_variance = Param('noise_variance', noise_var, Logexp())
+        self.likelihood = likelihood
+        if likelihood is not None:
+            likelihood.check(self.Y_all)
+        else:
+            self.noise_variance = Param('noise_variance', noise_var, Logexp())
         if self.unsupervised:
             self.X_mean = Param('X_mean', self.X_all.copy())
             self.X_var = Param('X_var', np.full(self.X_all.shape, q_sqrt_x ** 2), Logexp())
             self.link_parameters(self.X_mean, self.X_var)
-        self.link_parameters(*(self.layers + [self.noise_variance]))
+        self.link_parameters(*(self.layers + ([self.noise_variance] if likelihood is None else [])))
         self.resample()
 
     # --- randomness -------------------------------------------------------
@@ -158,9 +167,10 @@ class DoublyStochasticDeepGP(Model):
             extra = dict(x_var=self.X_var.values[self.idx], eps_x=self.eps_x)
         else:
             X = self.X_all[self.idx]
-        bound, g = doubly_stochastic_bound(layers, X, Y, float(self.noise_variance.values[0]), self.eps,
+        noise = 1. if self.likelihood is not None else float(self.noise_variance.values[0])
+        bound, g = doubly_stochastic_bound(layers, X, Y, noise, self.eps,
                                            jitter=self.jitter, scale=self.N / float(len(self.idx)),
-                                           **extra)
+                                           likelihood=self.likelihood, **extra)
         if self.unsupervised:
             gm, gv = np.zeros_like(self.X_all), np.zeros_like(self.X_all)
             gm[self.idx], gv[self.idx] = g['X'], g['x_var']
@@ -172,7 +182,8 @@ class DoublyStochasticDeepGP(Model):
             layer.Z.gradient = gl['Z']
             layer.q_mu.gradient = gl['q_mu']
             layer.q_chol_flat.gradient = choleskies.triang_to_flat(gl['q_chol'])
-        self.noise_variance.gradient = g['noise_var']
+        if self.likelihood is None:
+            self.noise_variance.gradient = g['noise_var']
 
     def log_likelihood(self):
         return self._log_marginal_likelihood
@@ -191,6 +202,8 @@ class DoublyStochasticDeepGP(Model):
         """
         if seed is not None:
             self.rng = np.random.RandomState(seed)
+        if natgrad_gamma > 0. and self.likelihood is not None and not self.likelihood.log_concave:
+            raise ValueError("natural gradients need a log-concave likelihood; use natgrad_gamma=0")
         B = batch_size or self.batch_size or self.N
         theta = self.optimizer_array.copy()
         m, v, history = np.zeros_like(theta), np.zeros_like(theta), []
@@ -221,15 +234,10 @@ class DoublyStochasticDeepGP(Model):
         return history
 
     # --- prediction --------------------------------------------------------
-    def predict(self, Xnew, n_samples=None, seed=None):
-        """Mean and variance of ``y`` at ``Xnew`` from a Monte Carlo mixture over hidden layers.
-
-        Variance includes the noise. Uses its own generator (``seed``) so the training
-        ``eps`` are not disturbed.
-        """
-        S = n_samples or max(self.n_samples, 20)
+    def _top_marginals(self, Xnew, S, seed):
+        """``S`` Monte Carlo draws through the hidden layers; top-layer ``(mu, var)`` for each."""
         rng = np.random.RandomState(0 if seed is None else seed)
-        means, vars_ = [], []
+        out = []
         for _ in range(S):
             h = np.asarray(Xnew, float)
             for l, layer in enumerate(self.layers):
@@ -240,8 +248,39 @@ class DoublyStochasticDeepGP(Model):
                     mu = mu + h
                 if l < len(self.layers) - 1:
                     h = reparam_sample(mu, var, rng.randn(*mu.shape))
-            means.append(mu); vars_.append(var)
-        means, vars_ = np.array(means), np.array(vars_)
+            out.append((mu, var))
+        return out
+
+    def predict(self, Xnew, n_samples=None, seed=None):
+        """Mean and variance at ``Xnew`` from a Monte Carlo mixture over hidden layers.
+
+        Gaussian likelihood: the variance includes the noise (the distribution of ``y``). Other
+        likelihoods: the mean and variance of the latent ``f``; see :meth:`predict_y`.
+        Uses its own generator (``seed``) so the training ``eps`` are not disturbed.
+        """
+        S = n_samples or max(self.n_samples, 20)
+        draws = self._top_marginals(Xnew, S, seed)
+        means, vars_ = np.array([d[0] for d in draws]), np.array([d[1] for d in draws])
         mean = means.mean(0)
-        var = (vars_ + means ** 2).mean(0) - mean ** 2 + float(self.noise_variance.values[0])
+        var = (vars_ + means ** 2).mean(0) - mean ** 2
+        if self.likelihood is None:
+            var = var + float(self.noise_variance.values[0])
         return mean, var
+
+    def predict_y(self, Xnew, n_samples=None, seed=None):
+        """Predictive mean of ``y`` (the probability of +1 for ``Probit``, the rate for ``Poisson``)."""
+        if self.likelihood is None:
+            return self.predict(Xnew, n_samples, seed)[0]
+        S = n_samples or max(self.n_samples, 20)
+        return np.mean([self.likelihood.predictive_mean(mu, var)
+                        for mu, var in self._top_marginals(Xnew, S, seed)], axis=0)
+
+    def log_predictive_density(self, Xnew, Ynew, n_samples=None, seed=None):
+        """Per-row ``log p(y | x)``, summed over outputs, averaged over hidden-layer samples."""
+        Ynew = np.asarray(Ynew, float)
+        S = n_samples or max(self.n_samples, 20)
+        lik = self.likelihood if self.likelihood is not None else Gaussian(self.noise_variance.values[0])
+        logs = np.array([np.sum(np.log(lik.predictive_density(Ynew, mu, var)), axis=1)
+                         for mu, var in self._top_marginals(Xnew, S, seed)])
+        top = logs.max(0)
+        return top + np.log(np.mean(np.exp(logs - top), axis=0))

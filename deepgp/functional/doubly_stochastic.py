@@ -36,7 +36,7 @@ def _check_layers(layers, X):
 
 
 def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1., kl_scale=1.,
-                           x_var=None, eps_x=None):
+                           x_var=None, eps_x=None, likelihood=None):
     """Bound and gradients for a stack of layers.
 
     :param eps: list over samples; each entry a list with one ``(N, width)`` standard
@@ -45,6 +45,10 @@ def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1.,
         the bottom inputs (the unsupervised case; ``X`` is then the mean). Each sample draws
         ``X + sqrt(x_var) * eps_x[s]`` (``eps_x``: one ``(N, Q)`` array per sample) and the bound
         subtracts ``scale * KL(q(X) || N(0, I))``.
+    :param likelihood: optional :class:`~deepgp.functional.likelihoods.Likelihood`; ``None`` means
+        Gaussian with ``noise_var`` (analytic, and ``grads['noise_var']`` is returned). With a
+        likelihood object its expectations replace the Gaussian data term and ``noise_var`` is
+        ignored (``grads['noise_var']`` is ``0.``).
     :returns: ``(bound, grads)`` where ``grads`` has ``layers`` (list of dicts with
         ``q_mu``, ``q_chol``, ``kern``, ``Z``), ``noise_var``, ``X``, ``x_var`` (``0.`` unless given) and ``natgrad`` (``g_m (M, P)`` and ``g_S (P, M, M)``: gradients of the
         expected log likelihood, without the KL, with respect to the top layer's ``m`` and ``S``;
@@ -76,12 +80,16 @@ def doubly_stochastic_bound(layers, X, Y, noise_var, eps, jitter=1e-6, scale=1.,
             caches.append(cache); variances.append(var)
             if l < L - 1:
                 h = reparam_sample(mu, var, sample[l])
-        resid = Y - mu
-        ell += scale * np.sum(-0.5 * np.log(2 * np.pi * noise_var) - 0.5 * (resid ** 2 + var) / noise_var)
-        g_noise += scale * np.sum(-0.5 / noise_var + 0.5 * (resid ** 2 + var) / noise_var ** 2)
-
-        g_mu = scale * resid / noise_var
-        g_var = -0.5 * scale / noise_var * np.ones_like(var)
+        if likelihood is None:
+            resid = Y - mu
+            ell += scale * np.sum(-0.5 * np.log(2 * np.pi * noise_var) - 0.5 * (resid ** 2 + var) / noise_var)
+            g_noise += scale * np.sum(-0.5 / noise_var + 0.5 * (resid ** 2 + var) / noise_var ** 2)
+            g_mu = scale * resid / noise_var
+            g_var = -0.5 * scale / noise_var * np.ones_like(var)
+        else:
+            e, gm, gv = likelihood.variational_expectations(Y, mu, var)
+            ell += scale * np.sum(e)
+            g_mu, g_var = scale * gm, scale * gv
         for l in range(L - 1, -1, -1):
             layer = layers[l]
             g = whitened_marginals_backward(layer['kern'], layer['Z'].copy(), inputs[l].copy(),

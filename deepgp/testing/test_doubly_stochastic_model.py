@@ -147,3 +147,63 @@ class SelectionUnsupervisedTest(unittest.TestCase):
         m = deepgp.DeepGP([4, 2], Y, num_inducing=5, inference_method='doubly_stochastic')
         self.assertIsInstance(m, DoublyStochasticDeepGP)
         self.assertTrue(m.unsupervised)
+
+
+class NonGaussianLikelihoodTest(unittest.TestCase):
+    def _classification(self, N=60, seed=0):
+        rng = np.random.RandomState(seed)
+        X = rng.uniform(-2, 2, (N, 2))
+        y = np.where(X[:, 0] * X[:, 1] > 0, 1., -1.)[:, None]
+        return X, y
+
+    def test_no_noise_parameter_and_checkgrad(self):
+        from deepgp.functional.likelihoods import Probit
+        X, y = self._classification(12)
+        m = DoublyStochasticDeepGP([1, 2, 2], y, X, num_inducing=4, n_samples=2, seed=1,
+                                   likelihood=Probit())
+        self.assertFalse(hasattr(m, 'noise_variance'))
+        self.assertTrue(m.checkgrad(tolerance=1e-3))
+
+    def test_probit_two_layer_learns_xor(self):
+        from deepgp.functional.likelihoods import Probit
+        X, y = self._classification()
+        m = DoublyStochasticDeepGP([1, 2, 2], y, X, num_inducing=15, seed=0, likelihood=Probit())
+        m.fit_minibatch(steps=600, batch_size=30, lr=0.02, seed=0)
+        p = m.predict_y(X, n_samples=10)
+        self.assertGreater(np.mean((p > .5) == (y > 0)), 0.9)
+        self.assertTrue(np.all((p >= 0) & (p <= 1)))
+        nll = -np.mean(m.log_predictive_density(X, y, n_samples=10))
+        self.assertLess(nll, 0.5)                     # chance is log 2 = 0.69
+
+    def test_natgrad_with_probit_helps_and_student_t_refuses(self):
+        from deepgp.functional.likelihoods import Probit, StudentT
+        X, y = self._classification()
+        bounds = []
+        for gamma in (0., 0.1):
+            m = DoublyStochasticDeepGP([1, 2, 2], y, X, num_inducing=15, seed=0, likelihood=Probit())
+            m.fit_minibatch(steps=200, batch_size=30, lr=0.02, seed=0, natgrad_gamma=gamma)
+            m.set_batch(None)
+            m.resample(seed=5)
+            bounds.append(m.log_likelihood())
+        self.assertGreater(bounds[1], bounds[0])
+        m = DoublyStochasticDeepGP([1, 1], y[:, :1], X[:, :1] * 0 + 1, num_inducing=4,
+                                   likelihood=StudentT())
+        with self.assertRaises(ValueError):
+            m.fit_minibatch(steps=1, natgrad_gamma=0.1)
+
+    def test_poisson_regression(self):
+        from deepgp.functional.likelihoods import Poisson
+        rng = np.random.RandomState(0)
+        X = rng.uniform(-2, 2, (80, 1))
+        y = rng.poisson(np.exp(1. + np.sin(2 * X))).astype(float)
+        m = DoublyStochasticDeepGP([1, 1], y, X, num_inducing=12, seed=0, likelihood=Poisson())
+        m.fit_minibatch(steps=500, batch_size=40, lr=0.02, seed=0)
+        rate = m.predict_y(X)
+        self.assertLess(np.mean((np.log(rate) - (1. + np.sin(2 * X))) ** 2), 0.3)
+
+    def test_gaussian_predictive_density_is_analytic_for_one_layer(self):
+        X, Y = _data(20)
+        m = DoublyStochasticDeepGP([1, 1], Y, X, num_inducing=5, seed=0)
+        mu, var = m.predict(X, n_samples=1)
+        want = -0.5 * np.log(2 * np.pi * var) - 0.5 * (Y - mu) ** 2 / var
+        np.testing.assert_allclose(m.log_predictive_density(X, Y, n_samples=1), want[:, 0], rtol=1e-8)

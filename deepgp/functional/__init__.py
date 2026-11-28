@@ -35,6 +35,7 @@ from .gradients import route_gradients
 from .uncollapsed import (whitened_marginals, whitened_marginals_backward, whitened_kl,
                           reparam_sample, reparam_sample_backward,
                           whitened_expectation_grads, whitened_natgrad_step)
+from . import likelihoods
 from .doubly_stochastic import doubly_stochastic_bound
 from .qx import qx_gradients, aggregate_qx, disaggregate_qx_gradients
 
@@ -42,4 +43,4 @@ __all__ = ["collapsed_bound", "route_gradients", "qx_gradients",
            "aggregate_qx", "disaggregate_qx_gradients",
            "whitened_marginals", "whitened_marginals_backward", "whitened_kl",
            "reparam_sample", "reparam_sample_backward", "doubly_stochastic_bound",
-           "whitened_expectation_grads", "whitened_natgrad_step"]
+           "whitened_expectation_grads", "whitened_natgrad_step", "likelihoods"]

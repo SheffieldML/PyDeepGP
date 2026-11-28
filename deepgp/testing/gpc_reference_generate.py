@@ -22,13 +22,24 @@ import sys
 import tempfile
 import os
 
+import importlib.util
+import glob
+
 import numpy as np
-from gpc._gpc import DeepGP
+
+try:
+    from gpc._gpc import DeepGP
+except ImportError:     # package __init__ can be newer than the compiled module: load the module alone
+    _so = glob.glob(os.path.join(os.getcwd(), 'gpc', '_gpc*.so'))[0]
+    _spec = importlib.util.spec_from_file_location('gpc._gpc', _so)
+    _mod = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    DeepGP = _mod.DeepGP
 
 
-def _build(X, Y, L, M, hidden, seed):
+def _build(X, Y, L, M, hidden, seed, likelihood='gaussian'):
     rng = np.random.RandomState(seed)
-    m = DeepGP(X, Y, layers=L, hidden=hidden, num_inducing=M)
+    m = DeepGP(X, Y, layers=L, hidden=hidden, num_inducing=M, likelihood=likelihood)
     path = os.path.join(tempfile.mkdtemp(), 'ref.model')
     m.save(path)
     t = open(path).read().split('\n')
@@ -87,7 +98,27 @@ def main(target, n_mc=4000):
             case['elbo_stderr'] = float(vals.std() / np.sqrt(n_mc))
             case['layer_kl'] = [g.layer_kl(i) for i in range(L)]
         cases.append(case)
-    data = dict(X=X.tolist(), Y=Y.tolist(), Xtest=Xt.tolist(), hidden=2,
+    # Non-Gaussian top layers. One layer is exact (same 20-point Gauss-Hermite rule); two layers
+    # are a Monte Carlo mean as above. Labels and counts are drawn from the same inputs.
+    r = np.random.RandomState(7)
+    f0 = np.sin(X[:, :1]) + 0.5 * X[:, 1:]
+    Ydata = {'probit': np.where(f0 + 0.3 * r.randn(20, 1) > 0, 1., -1.),
+             'poisson': r.poisson(np.exp(0.5 * f0)).astype(float),
+             'student_t': f0 + 0.3 * r.standard_t(3, (20, 1))}
+    lik_cases = []
+    for lik, Yl in Ydata.items():
+        for L, seed in ((1, 11), (2, 12)):
+            g, layers = _build(X, Yl, L, 4, 2, seed, likelihood=lik)
+            case = dict(name='%s_%d' % (lik, L), likelihood=lik, num_layers=L, layers=layers,
+                        Y=Yl.tolist(), layer_kl=[g.layer_kl(i) for i in range(L)])
+            if L == 1:
+                case['elbo'] = g.elbo()
+            else:
+                vals = np.array([g.elbo() for _ in range(n_mc)])
+                case['elbo_mean'] = float(vals.mean())
+                case['elbo_stderr'] = float(vals.std() / np.sqrt(n_mc))
+            lik_cases.append(case)
+    data = dict(likelihood_cases=lik_cases, X=X.tolist(), Y=Y.tolist(), Xtest=Xt.tolist(), hidden=2,
                 num_inducing=4, cases=cases)
     with open(target, 'w') as f:
         json.dump(data, f, indent=1)

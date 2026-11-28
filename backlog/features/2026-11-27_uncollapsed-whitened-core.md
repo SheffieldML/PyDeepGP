@@ -215,3 +215,16 @@ reconstruction on seeds 0 and 1. On CMU the best collapsed initialisation (0.307
 doubly stochastic result (0.281) but still does not match it. The optimiser and initialisation
 choices are one family (PCA start, default kernels, L-BFGS); a collapsed model tuned by the original
 DeepGP recipe (staged layer training, fixed noise early) could do better, and we have not tried that.
+
+### Non-Gaussian likelihoods (slice 4)
+
+Shipped `deepgp.functional.likelihoods` (`Gaussian`, `Probit`, `Poisson`, `StudentT`), a `likelihood=`
+argument on `DoublyStochasticDeepGP`, `predict_y` and `log_predictive_density`. The top-layer
+expectation uses 20-point Gauss-Hermite quadrature with the exact quadrature derivatives, as in GPc.
+Cross-check against a freshly built GPc: L=1 ELBOs agree to 4 places for all three likelihoods, and
+L=2 Monte Carlo ELBOs agree within 4 combined standard errors. GPc's probit has a bias (initialised to
+`Phi^{-1}` of the positive fraction); ours is a fixed `bias`, set with `Probit.from_labels`.
+
+Not shipped: softmax, robust-max, ordered, binomial, and learning likelihood parameters (probit bias,
+Student-t scale and degrees of freedom). Finding for the interchange work: the installed GPc extension
+was stale; its `.model` stream did not carry the likelihood until GPc was rebuilt from current source.
